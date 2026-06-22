@@ -2,7 +2,7 @@
 """Main entry point for Air Rallies Player application."""
 
 import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow
+from PySide6.QtWidgets import QApplication, QMainWindow
 from ui.gui_airrallies_player import Ui_MainWindow
 
 

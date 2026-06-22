@@ -2,7 +2,7 @@
 """Main entry point for Air Rallies Staff application."""
 
 import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow
+from PySide6.QtWidgets import QApplication, QMainWindow
 from ui.gui_airrallies_staff import Ui_MainWindow
 
 
