@@ -1,0 +1,12 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+# Venv
+bin/
+lib/
+lib64/
+lib64
+include/
+pyvenv.cfg
+share/
+
+# Garder requirements.txt
+!requirements.txt
