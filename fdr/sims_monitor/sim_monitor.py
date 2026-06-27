@@ -1,0 +1,732 @@
+"""
+Simulator Monitor - Module unifié pour MSFS/P3D et X-Plane 12
+Enregistre les données de vol en temps réel dans un fichier GeoJSON.
+
+Utilisation :
+    from sim_monitor import create_monitor, SimulatorType
+    
+    monitor = create_monitor(
+        simulator_type=SimulatorType.XPLANE.value,
+        geojson_path="/chemin/vers/fichier.geojson",
+        poll_interval=1.0,
+        host="127.0.0.1",
+        port=8086
+    )
+    
+    monitor.set_connection_callback(lambda connected, msg: print(f"Statut: {connected}, {msg}"))
+    monitor.start_monitoring()
+    
+    # ... plus tard ...
+    monitor.stop_monitoring()
+
+Dépendances :
+    - Pour X-Plane : pip install requests
+    - Pour MSFS/P3D : pip install SimConnect (Windows uniquement)
+
+Auteurs : Adapté des moniteurs originaux MSFS et X-Plane
+"""
+
+import json
+import os
+import threading
+import time
+from abc import ABC, abstractmethod
+from datetime import datetime, timedelta, timezone
+from enum import Enum
+from typing import Any, Callable, Optional
+
+# ---------------------------------------------------------------------------
+# Types et constantes
+# ---------------------------------------------------------------------------
+
+class SimulatorType(Enum):
+    """Types de simulateurs supportés."""
+    MSFS = "msfs"
+    XPLANE = "xplane"
+
+
+# Constantes de conversion
+M_TO_FT = 3.28084
+MPS_TO_KT = 1.94384
+W_TO_HP = 0.00134102
+FT_LB_PER_S_TO_HP = 550.0
+
+# J2000 epoch pour MSFS (1er janvier 2000 à 12h00 UTC)
+J2000_EPOCH = datetime(2000, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+# ---------------------------------------------------------------------------
+# Writer GeoJSON Thread-Safe
+# ---------------------------------------------------------------------------
+
+class GeoJSONWriter:
+    """
+    Gère l'écriture des points de mesure au format GeoJSON.
+    Thread-safe pour utilisation avec plusieurs threads.
+    """
+
+    def __init__(self, filepath: str):
+        """
+        Args:
+            filepath: Chemin complet vers le fichier GeoJSON de sortie
+        """
+        self.filepath = filepath
+        self._features = []
+        self._lock = threading.Lock()
+        
+        # Créer le dossier parent s'il n'existe pas
+        dirname = os.path.dirname(filepath)
+        if dirname:
+            os.makedirs(dirname, exist_ok=True)
+        
+        # Écrire l'en-tête initial
+        self._write_initial()
+
+    def _write_initial(self):
+        """Écrit le squelette GeoJSON initial."""
+        geojson = {
+            "type": "FeatureCollection",
+            "features": self._features
+        }
+        with open(self.filepath, 'w', encoding='utf-8') as f:
+            json.dump(geojson, f, indent=2, ensure_ascii=False)
+
+    def add_point(self, data: dict) -> None:
+        """
+        Ajoute un point de mesure au GeoJSON.
+        
+        Args:
+            data: Dictionnaire contenant les données du simulateur
+        """
+        with self._lock:
+            # Extraire et nettoyer les coordonnées
+            lat = data.get("latitude", "—")
+            lon = data.get("longitude", "—")
+            alt = data.get("alt_msl", "—")
+            
+            try:
+                lat_float = float(lat.replace('°', '').strip()) if lat and lat != "—" else 0.0
+                lon_float = float(lon.replace('°', '').strip()) if lon and lon != "—" else 0.0
+                # Altitude en pieds -> mètres pour GeoJSON (standard)
+                alt_str = alt.replace('ft', '').replace(',', '').strip() if alt else "0"
+                alt_float = float(alt_str) if alt_str and alt_str != "—" else 0.0
+                alt_m = alt_float / M_TO_FT  # Convertir en mètres
+            except (ValueError, AttributeError):
+                lat_float, lon_float, alt_m = 0.0, 0.0, 0.0
+
+            # Créer la feature GeoJSON
+            feature = {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [lon_float, lat_float, alt_m]
+                },
+                "properties": {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "sim_time": data.get("sim_time", "—"),
+                    "alt_msl": data.get("alt_msl", "—"),
+                    "alt_agl": data.get("alt_agl", "—"),
+                    "heading_true": data.get("heading_true", "—"),
+                    "heading_mag": data.get("heading_mag", "—"),
+                    "ias": data.get("ias", "—"),
+                    "gs": data.get("gs", "—"),
+                    "power": data.get("power", "—"),
+                    "acf_icao": data.get("acf_icao", "—"),
+                    "acf_name": data.get("acf_name", "—")
+                }
+            }
+
+            self._features.append(feature)
+
+            # Réécrire le fichier complet
+            geojson = {
+                "type": "FeatureCollection",
+                "features": self._features
+            }
+            with open(self.filepath, 'w', encoding='utf-8') as f:
+                json.dump(geojson, f, indent=2, ensure_ascii=False)
+
+# ---------------------------------------------------------------------------
+# Interface de base pour les moniteurs
+# ---------------------------------------------------------------------------
+
+class BaseSimulatorMonitor(ABC):
+    """
+    Classe de base abstraite pour les moniteurs de simulateur.
+    
+    Fournit une interface unifiée pour la connexion, la déconnexion,
+    et la récupération des données de vol.
+    """
+
+    def __init__(self, geojson_path: str, poll_interval: float = 1.0):
+        """
+        Args:
+            geojson_path: Chemin vers le fichier GeoJSON de sortie
+            poll_interval: Intervalle de polling en secondes (default: 1.0)
+        """
+        self.geojson_writer = GeoJSONWriter(geojson_path)
+        self.poll_interval = poll_interval
+        self._running = False
+        self._connected = False
+        self._connection_callback: Optional[Callable[[bool, str], None]] = None
+        self._monitor_thread: Optional[threading.Thread] = None
+        self._lock = threading.Lock()
+
+    @abstractmethod
+    def connect(self) -> bool:
+        """
+        Établit la connexion au simulateur.
+        
+        Returns:
+            True si la connexion a réussi, False sinon
+        """
+        pass
+
+    @abstractmethod
+    def disconnect(self) -> None:
+        """Ferme la connexion au simulateur."""
+        pass
+
+    @abstractmethod
+    def get_data(self) -> dict:
+        """
+        Récupère les données actuelles du simulateur.
+        
+        Returns:
+            Dictionnaire contenant les données de vol
+        """
+        pass
+
+    @property
+    def is_connected(self) -> bool:
+        """Retourne True si connecté au simulateur."""
+        return self._connected
+
+    def set_connection_callback(self, callback: Callable[[bool, str], None]) -> None:
+        """
+        Définit un callback pour les changements de statut de connexion.
+        
+        Args:
+            callback: Fonction appelée avec (is_connected: bool, message: str)
+        """
+        self._connection_callback = callback
+
+    def _notify_connection_status(self, connected: bool, message: str) -> None:
+        """
+        Notifie le callback de changement de statut de connexion.
+        Thread-safe.
+        """
+        with self._lock:
+            self._connected = connected
+            if self._connection_callback:
+                try:
+                    self._connection_callback(connected, message)
+                except Exception:
+                    pass  # Ne pas propager les erreurs du callback
+
+    def start_monitoring(self) -> None:
+        """
+        Démarre la boucle de monitoring dans un thread séparé.
+        
+        Le monitoring récupère les données toutes les `poll_interval` secondes
+        et les enregistre dans le fichier GeoJSON.
+        """
+        if self._running:
+            return
+
+        self._running = True
+        self._monitor_thread = threading.Thread(
+            target=self._monitor_loop,
+            daemon=True
+        )
+        self._monitor_thread.start()
+
+    def stop_monitoring(self) -> None:
+        """
+        Arrête la boucle de monitoring et ferme la connexion.
+        """
+        self._running = False
+        if self._monitor_thread:
+            self._monitor_thread.join(timeout=5.0)
+            self._monitor_thread = None
+        self.disconnect()
+        self._notify_connection_status(False, "Monitoring arrêté")
+
+    def _monitor_loop(self) -> None:
+        """
+        Boucle principale de monitoring.
+        Doit être appelée dans un thread séparé.
+        """
+        # Tentative de connexion initiale
+        if not self.connect():
+            self._notify_connection_status(
+                False,
+                "Échec de la connexion initiale au simulateur"
+            )
+            self._running = False
+            return
+
+        self._notify_connection_status(True, "Connecté au simulateur")
+
+        # Boucle de polling
+        while self._running:
+            try:
+                data = self.get_data()
+                if data:
+                    # Enregistrer dans GeoJSON
+                    self.geojson_writer.add_point(data)
+                
+                # Attendre l'intervalle de polling
+                for _ in range(int(self.poll_interval * 10)):
+                    if not self._running:
+                        break
+                    time.sleep(0.1)
+                    
+            except Exception as e:
+                self._notify_connection_status(
+                    False,
+                    f"Erreur lors de la récupération des données: {str(e)}"
+                )
+                self._running = False
+                break
+
+        self._notify_connection_status(False, "Déconnecté")
+
+# ---------------------------------------------------------------------------
+# Moniteur MSFS (SimConnect)
+# ---------------------------------------------------------------------------
+
+class MSFSMonitor(BaseSimulatorMonitor):
+    """
+    Moniteur pour MSFS 2020/2024/P3D via SimConnect.
+    
+    Note: SimConnect est une API Windows native. Ce moniteur ne fonctionnera
+    que sur Windows avec le simulateur en cours d'exécution.
+    """
+
+    MAX_ENGINES = 4
+
+    def __init__(self, geojson_path: str, poll_interval: float = 1.0):
+        """
+        Args:
+            geojson_path: Chemin vers le fichier GeoJSON de sortie
+            poll_interval: Intervalle de polling en secondes
+        """
+        super().__init__(geojson_path, poll_interval)
+        self._sm = None
+        self._aq = None
+
+    def connect(self) -> bool:
+        """Établit la connexion SimConnect."""
+        try:
+            # Import dynamique pour éviter les erreurs sur les systèmes non-Windows
+            from SimConnect import SimConnect, AircraftRequests
+            self._sm = SimConnect()
+            # _time=0 : pas de cache côté bibliothèque, on lit la valeur fraîche
+            self._aq = AircraftRequests(self._sm, _time=0)
+            return True
+        except ImportError:
+            self._notify_connection_status(
+                False,
+                "Module SimConnect non installé (Windows uniquement)"
+            )
+            return False
+        except Exception as e:
+            self._notify_connection_status(
+                False,
+                f"Échec de connexion SimConnect: {str(e)}"
+            )
+            return False
+
+    def disconnect(self) -> None:
+        """Ferme la connexion SimConnect."""
+        if self._sm:
+            try:
+                self._sm.exit()
+            except Exception:
+                pass
+            self._sm = None
+            self._aq = None
+
+    def get_data(self) -> dict:
+        """Récupère les données MSFS."""
+        if not self._aq:
+            return {}
+
+        s = {}
+
+        try:
+            # Position
+            lat = self._aq.get("PLANE LATITUDE")
+            lon = self._aq.get("PLANE LONGITUDE")
+            s["latitude"] = f"{float(lat):.6f} °" if lat is not None else "—"
+            s["longitude"] = f"{float(lon):.6f} °" if lon is not None else "—"
+
+            # Temps (ABSOLUTE TIME = secondes depuis J2000 epoch)
+            abs_t = self._aq.get("ABSOLUTE TIME")
+            s["sim_time"] = self._absolute_time_to_iso(abs_t) if abs_t is not None else "—"
+
+            # Altitudes
+            alt_msl = self._aq.get("INDICATED ALTITUDE")
+            alt_agl = self._aq.get("PLANE ALT ABOVE GROUND")
+            s["alt_msl"] = f"{float(alt_msl):,.0f} ft" if alt_msl is not None else "—"
+            s["alt_agl"] = f"{float(alt_agl):,.0f} ft" if alt_agl is not None else "—"
+
+            # Caps
+            hdg_true = self._aq.get("PLANE HEADING DEGREES TRUE")
+            hdg_mag = self._aq.get("PLANE HEADING DEGREES MAGNETIC")
+            s["heading_true"] = f"{float(hdg_true):.1f} °" if hdg_true is not None else "—"
+            s["heading_mag"] = f"{float(hdg_mag):.1f} °" if hdg_mag is not None else "—"
+
+            # Vitesse
+            ias = self._aq.get("AIRSPEED INDICATED")
+            gs = self._aq.get("GROUND VELOCITY")
+            s["ias"] = f"{float(ias):.1f} kt" if ias is not None else "—"
+            s["gs"] = f"{float(gs):.1f} kt" if gs is not None else "—"
+
+            # Puissance moteur (GENERAL ENG BRAKE POWER:N en ft-lb/s → HP)
+            s["power"] = f"{self._get_engine_power_hp():.0f} hp"
+
+            # Appareil
+            acf_type = self._aq.get("ATC TYPE")
+            acf_title = self._aq.get("TITLE")
+            s["acf_icao"] = str(acf_type).strip() if acf_type else "—"
+            s["acf_name"] = str(acf_title).strip() if acf_title else "—"
+
+        except Exception as e:
+            s["error"] = str(e)
+
+        return s
+
+    def _absolute_time_to_iso(self, abs_time: float) -> str:
+        """
+        Convertit ABSOLUTE TIME (secondes depuis J2000) en ISO 8601 UTC.
+        """
+        try:
+            dt = J2000_EPOCH + timedelta(seconds=float(abs_time))
+            return dt.strftime("%Y-%m-%dT%H:%M:%S Z")
+        except Exception:
+            return "—"
+
+    def _get_engine_power_hp(self) -> float:
+        """
+        Somme la puissance de tous les moteurs actifs.
+        GENERAL ENG BRAKE POWER:N est en ft-lb/s → conversion en HP.
+        """
+        total = 0.0
+        for i in range(1, self.MAX_ENGINES + 1):
+            val = self._aq.get(f"GENERAL ENG BRAKE POWER:{i}")
+            if val is not None:
+                try:
+                    total += float(val)
+                except (TypeError, ValueError):
+                    pass
+        return total / FT_LB_PER_S_TO_HP
+
+# ---------------------------------------------------------------------------
+# API X-Plane (interne)
+# ---------------------------------------------------------------------------
+
+class _XPlaneAPI:
+    """
+    Encapsule le protocole REST X-Plane 12 v3.
+    
+    Protocole:
+      1. GET /api/v3/datarefs?filter[name]=<path> → résolution path → id
+      2. GET /api/v3/datarefs/<id>/value → lecture de la valeur
+    
+    Les datarefs de type "data" (string) sont retournées encodées en base64.
+    """
+
+    def __init__(self, host: str, port: int):
+        self._base = f"http://{host}:{port}/api/v3"
+        self._cache: dict[str, int] = {}
+        self._types: dict[str, str] = {}
+        self._session = None
+
+    def resolve_ids(self, paths: dict[str, str]) -> None:
+        """
+        Résout les IDs numériques des datarefs.
+        
+        Args:
+            paths: Dictionnaire {clé: chemin_dataref}
+        
+        Raises:
+            ValueError: Si une dataref est introuvable
+            requests.exceptions.RequestException: En cas d'erreur réseau
+        """
+        import requests
+        if self._session is None:
+            self._session = requests.Session()
+            self._session.headers.update({"Accept": "application/json"})
+
+        for key, path in paths.items():
+            resp = self._session.get(
+                f"{self._base}/datarefs",
+                params={"filter[name]": path},
+                timeout=5,
+            )
+            resp.raise_for_status()
+            records = resp.json()["data"]
+            if not records:
+                raise ValueError(f"Dataref introuvable: {path}")
+            self._cache[key] = records[0]["id"]
+            self._types[key] = records[0]["value_type"]
+
+    def _fetch_value(self, key: str) -> Any:
+        """Récupère la valeur brute d'une dataref."""
+        dr_id = self._cache[key]
+        resp = self._session.get(
+            f"{self._base}/datarefs/{dr_id}/value",
+            timeout=3,
+        )
+        resp.raise_for_status()
+        return resp.json()["data"]
+
+    def get_float(self, key: str) -> float:
+        """Récupère une valeur flottante."""
+        return float(self._fetch_value(key))
+
+    def get_float_array(self, key: str) -> list[float]:
+        """Récupère un tableau de flottants."""
+        val = self._fetch_value(key)
+        if isinstance(val, list):
+            return [float(v) for v in val if v is not None]
+        return [float(val)]
+
+    def get_string(self, key: str) -> str:
+        """
+        Récupère une chaîne de caractères.
+        Décode base64 si nécessaire et retire les octets nuls.
+        """
+        import base64
+        raw = self._fetch_value(key)
+        if isinstance(raw, str):
+            try:
+                decoded = base64.b64decode(raw)
+                return decoded.rstrip(b"\x00").decode("utf-8", errors="replace").strip()
+            except Exception:
+                return raw.strip()
+        if isinstance(raw, list):
+            return bytes(b for b in raw if b != 0).decode("utf-8", errors="replace").strip()
+        return str(raw).strip()
+
+    def close(self) -> None:
+        """Ferme la session HTTP."""
+        if self._session:
+            self._session.close()
+            self._session = None
+
+# ---------------------------------------------------------------------------
+# Moniteur X-Plane
+# ---------------------------------------------------------------------------
+
+class XPlaneMonitor(BaseSimulatorMonitor):
+    """
+    Moniteur pour X-Plane 12 via API REST (port 8086 par défaut).
+    """
+
+    # Datarefs à surveiller
+    DATAREF_PATHS = {
+        "latitude": "sim/flightmodel/position/latitude",
+        "longitude": "sim/flightmodel/position/longitude",
+        "zulu_sec": "sim/time/zulu_time_sec",
+        "date_days": "sim/time/local_date_days",
+        "alt_msl_m": "sim/flightmodel/position/elevation",
+        "alt_agl_m": "sim/flightmodel/position/y_agl",
+        "heading_true": "sim/flightmodel/position/psi",
+        "heading_mag": "sim/flightmodel/position/mag_psi",
+        "ias_mps": "sim/flightmodel/position/indicated_airspeed",
+        "gs_mps": "sim/flightmodel/position/groundspeed",
+        "engine_power_w": "sim/flightmodel/engine/ENGN_power",
+        "acf_icao": "sim/aircraft/view/acf_ICAO",
+        "acf_name": "sim/aircraft/view/acf_descrip",
+    }
+
+    def __init__(
+        self,
+        geojson_path: str,
+        host: str = "127.0.0.1",
+        port: int = 8086,
+        poll_interval: float = 1.0
+    ):
+        """
+        Args:
+            geojson_path: Chemin vers le fichier GeoJSON de sortie
+            host: Adresse IP de X-Plane (default: 127.0.0.1)
+            port: Port de l'API REST X-Plane (default: 8086)
+            poll_interval: Intervalle de polling en secondes
+        """
+        super().__init__(geojson_path, poll_interval)
+        self.host = host
+        self.port = port
+        self._api = _XPlaneAPI(host, port)
+        self._ids_resolved = False
+
+    def connect(self) -> bool:
+        """
+        Résout les IDs des datarefs et teste la connexion.
+        """
+        try:
+            self._api.resolve_ids(self.DATAREF_PATHS)
+            self._ids_resolved = True
+            # Test de connexion avec une dataref simple
+            self._api.get_float("latitude")
+            return True
+        except ImportError:
+            self._notify_connection_status(
+                False,
+                "Module 'requests' non installé"
+            )
+            return False
+        except Exception as e:
+            self._notify_connection_status(
+                False,
+                f"Échec de connexion X-Plane: {str(e)}"
+            )
+            return False
+
+    def disconnect(self) -> None:
+        """Ferme la session HTTP."""
+        self._api.close()
+        self._ids_resolved = False
+
+    def get_data(self) -> dict:
+        """Récupère les données X-Plane."""
+        if not self._ids_resolved:
+            return {}
+
+        s = {}
+
+        try:
+            # Position
+            s["latitude"] = f"{self._api.get_float('latitude'):.6f} °"
+            s["longitude"] = f"{self._api.get_float('longitude'):.6f} °"
+
+            # Temps
+            zulu = self._api.get_float("zulu_sec")
+            days = self._api.get_float("date_days")
+            s["sim_time"] = self._build_iso(zulu, days)
+
+            # Altitudes (conversion m → ft)
+            s["alt_msl"] = f"{self._api.get_float('alt_msl_m') * M_TO_FT:,.0f} ft"
+            s["alt_agl"] = f"{self._api.get_float('alt_agl_m') * M_TO_FT:,.0f} ft"
+
+            # Caps
+            s["heading_true"] = f"{self._api.get_float('heading_true'):.1f} °"
+            s["heading_mag"] = f"{self._api.get_float('heading_mag'):.1f} °"
+
+            # Vitesse (conversion m/s → kt)
+            s["ias"] = f"{self._api.get_float('ias_mps') * MPS_TO_KT:.1f} kt"
+            s["gs"] = f"{self._api.get_float('gs_mps') * MPS_TO_KT:.1f} kt"
+
+            # Puissance (conversion W → HP)
+            power_arr = self._api.get_float_array("engine_power_w")
+            s["power"] = f"{sum(power_arr) * W_TO_HP:.0f} hp"
+
+            # Appareil
+            s["acf_icao"] = self._api.get_string("acf_icao")
+            s["acf_name"] = self._api.get_string("acf_name")
+
+        except Exception as e:
+            s["error"] = str(e)
+
+        return s
+
+    def _build_iso(self, zulu_sec: float, date_days: float) -> str:
+        """
+        Construit un timestamp ISO 8601 à partir des données X-Plane.
+        
+        Args:
+            zulu_sec: Secondes UTC depuis minuit
+            date_days: Jours depuis le 1er janvier de l'année en cours
+        """
+        year = datetime.now(timezone.utc).year
+        jan1 = datetime(year, 1, 1, tzinfo=timezone.utc)
+        dt = (jan1
+              + timedelta(days=int(date_days) - 1)
+              + timedelta(seconds=float(zulu_sec)))
+        return dt.strftime("%Y-%m-%dT%H:%M:%S Z")
+
+# ---------------------------------------------------------------------------
+# Factory
+# ---------------------------------------------------------------------------
+
+def create_monitor(
+    simulator_type: str,
+    geojson_path: str,
+    poll_interval: float = 1.0,
+    host: str = "127.0.0.1",
+    port: int = 8086
+) -> BaseSimulatorMonitor:
+    """
+    Factory pour créer un moniteur de simulateur.
+    
+    Args:
+        simulator_type: Type de simulateur - "msfs" ou "xplane"
+        geojson_path: Chemin vers le fichier GeoJSON de sortie
+        poll_interval: Intervalle de polling en secondes (default: 1.0)
+        host: Adresse IP pour X-Plane (ignoré pour MSFS, default: 127.0.0.1)
+        port: Port pour X-Plane (ignoré pour MSFS, default: 8086)
+    
+    Returns:
+        Instance de MSFSMonitor ou XPlaneMonitor
+    
+    Raises:
+        ValueError: Si simulator_type est invalide
+    
+    Exemple:
+        >>> monitor = create_monitor(
+        ...     simulator_type="xplane",
+        ...     geojson_path="/tmp/flight_track.geojson",
+        ...     poll_interval=1.0
+        ... )
+        >>> monitor.set_connection_callback(lambda c, m: print(m))
+        >>> monitor.start_monitoring()
+    """
+    if simulator_type == SimulatorType.MSFS.value:
+        return MSFSMonitor(geojson_path, poll_interval)
+    elif simulator_type == SimulatorType.XPLANE.value:
+        return XPlaneMonitor(geojson_path, host, port, poll_interval)
+    else:
+        raise ValueError(
+            f"Type de simulateur inconnu: '{simulator_type}'. "
+            f"Utilisez '{SimulatorType.MSFS.value}' ou '{SimulatorType.XPLANE.value}'"
+        )
+
+# ---------------------------------------------------------------------------
+# Fonction utilitaire pour vérifier la disponibilité
+# ---------------------------------------------------------------------------
+
+def check_simulator_available(simulator_type: str, host: str = "127.0.0.1", port: int = 8086) -> bool:
+    """
+    Vérifie si un simulateur est disponible sans démarrer le monitoring.
+    
+    Args:
+        simulator_type: "msfs" ou "xplane"
+        host: Adresse IP pour X-Plane
+        port: Port pour X-Plane
+    
+    Returns:
+        True si le simulateur est disponible, False sinon
+    """
+    try:
+        if simulator_type == SimulatorType.MSFS.value:
+            from SimConnect import SimConnect, AircraftRequests
+            sm = SimConnect()
+            aq = AircraftRequests(sm, _time=0)
+            # Test avec une SimVar simple
+            aq.get("PLANE LATITUDE")
+            sm.exit()
+            return True
+        elif simulator_type == SimulatorType.XPLANE.value:
+            import requests
+            api = _XPlaneAPI(host, port)
+            # Résoudre une dataref simple pour tester
+            api.resolve_ids({"test": "sim/flightmodel/position/latitude"})
+            api.get_float("test")
+            api.close()
+            return True
+        else:
+            return False
+    except Exception:
+        return False
