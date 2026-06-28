@@ -1,16 +1,24 @@
 """
 Simulator Monitor - Module unifié pour MSFS/P3D et X-Plane 12
-Enregistre les données de vol en temps réel dans un fichier GeoJSON.
+Enregistre les données de vol en temps réel dans un fichier GeoJSON (RFC 7946).
 
 Utilisation :
     from sim_monitor import create_monitor, SimulatorType
     
+    # Avec extension .json (recommandé pour l'interopérabilité)
     monitor = create_monitor(
         simulator_type=SimulatorType.XPLANE.value,
-        geojson_path="/chemin/vers/fichier.geojson",
+        geojson_path="/chemin/vers/fichier.json",
         poll_interval=1.0,
         host="127.0.0.1",
         port=8086
+    )
+    
+    # ou avec extension .geojson (convention géospatiale)
+    monitor = create_monitor(
+        simulator_type=SimulatorType.XPLANE.value,
+        geojson_path="/chemin/vers/trajectoire.geojson",
+        poll_interval=1.0
     )
     
     monitor.set_connection_callback(lambda connected, msg: print(f"Statut: {connected}, {msg}"))
@@ -22,6 +30,8 @@ Utilisation :
 Dépendances :
     - Pour X-Plane : pip install requests
     - Pour MSFS/P3D : pip install SimConnect (Windows uniquement)
+
+Note : Les extensions .json et .geojson sont toutes deux conformes à la RFC 7946.
 
 Auteurs : Adapté des moniteurs originaux MSFS et X-Plane
 """
@@ -60,26 +70,77 @@ J2000_EPOCH = datetime(2000, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 
 class GeoJSONWriter:
     """
-    Gère l'écriture des points de mesure au format GeoJSON.
+    Gère l'écriture des points de mesure au format GeoJSON conforme RFC 7946.
     Thread-safe pour utilisation avec plusieurs threads.
+    
+    Conformité RFC 7946:
+    - Coordonnées : [longitude, latitude] ou [longitude, latitude, altitude]
+    - Altitude en mètres (WGS 84)
+    - Propriétés : valeurs numériques sans unités (unités documentées séparément)
+    - Valeurs manquantes : null (pas de chaînes comme "—")
+    - Extensions supportées : .json (recommandé) ou .geojson
     """
+    
+    # Extensions valides selon RFC 7946
+    VALID_EXTENSIONS = (".json", ".geojson")
 
     def __init__(self, filepath: str):
         """
         Args:
-            filepath: Chemin complet vers le fichier GeoJSON de sortie
+            filepath: Chemin complet vers le fichier de sortie.
+                     Accepte .json ou .geojson (RFC 7946).
+                     Si aucune extension ou extension invalide, .json est ajouté.
+        
+        Raises:
+            ValueError: Si le chemin est vide ou invalide.
         """
-        self.filepath = filepath
+        if not filepath:
+            raise ValueError("Le chemin du fichier ne peut pas être vide")
+        
+        # Normaliser le chemin et vérifier l'extension
+        self.filepath = self._normalize_filepath(filepath)
+        
         self._features = []
         self._lock = threading.Lock()
         
         # Créer le dossier parent s'il n'existe pas
-        dirname = os.path.dirname(filepath)
+        dirname = os.path.dirname(self.filepath)
         if dirname:
             os.makedirs(dirname, exist_ok=True)
         
         # Écrire l'en-tête initial
         self._write_initial()
+    
+    def _normalize_filepath(self, filepath: str) -> str:
+        """
+        Normalise le chemin du fichier pour s'assurer qu'il a une extension valide.
+        Si le fichier n'a pas d'extension ou a une extension invalide, 
+        remplace/ajoute .json par défaut.
+        Normalise l'extension en minuscules pour cohérence.
+        
+        Args:
+            filepath: Chemin à normaliser
+            
+        Returns:
+            Chemin avec extension valide (.json ou .geojson en minuscules)
+        """
+        # Séparer le chemin et l'extension
+        base, ext = os.path.splitext(filepath)
+        
+        # Normaliser l'extension en minuscules
+        ext_lower = ext.lower()
+        
+        # Si pas d'extension ou extension invalide, utiliser .json par défaut
+        if not ext or ext_lower not in self.VALID_EXTENSIONS:
+            # Si pas d'extension du tout, ajouter .json
+            if not ext:
+                return f"{filepath}.json"
+            # Sinon, remplacer l'extension invalide par .json
+            else:
+                return f"{base}.json"
+        
+        # Sinon, retourner avec extension en minuscules
+        return f"{base}{ext_lower}"
 
     def _write_initial(self):
         """Écrit le squelette GeoJSON initial."""
@@ -92,47 +153,48 @@ class GeoJSONWriter:
 
     def add_point(self, data: dict) -> None:
         """
-        Ajoute un point de mesure au GeoJSON.
+        Ajoute un point de mesure au GeoJSON en conformité RFC 7946.
         
         Args:
             data: Dictionnaire contenant les données du simulateur
         """
         with self._lock:
-            # Extraire et nettoyer les coordonnées
-            lat = data.get("latitude", "—")
-            lon = data.get("longitude", "—")
-            alt = data.get("alt_msl", "—")
+            # Extraire et valider les coordonnées
+            lat_raw = data.get("latitude")
+            lon_raw = data.get("longitude")
+            alt_raw = data.get("alt_msl")
             
+            # Parser et valider latitude [-90, 90]
             try:
-                lat_float = float(lat.replace('°', '').strip()) if lat and lat != "—" else 0.0
-                lon_float = float(lon.replace('°', '').strip()) if lon and lon != "—" else 0.0
-                # Altitude en pieds -> mètres pour GeoJSON (standard)
-                alt_str = alt.replace('ft', '').replace(',', '').strip() if alt else "0"
-                alt_float = float(alt_str) if alt_str and alt_str != "—" else 0.0
-                alt_m = alt_float / M_TO_FT  # Convertir en mètres
-            except (ValueError, AttributeError):
-                lat_float, lon_float, alt_m = 0.0, 0.0, 0.0
+                lat_float = self._parse_latitude(lat_raw)
+            except ValueError:
+                # Coordonnée invalide -> ignorer ce point
+                return
+            
+            # Parser et valider longitude [-180, 180]
+            try:
+                lon_float = self._parse_longitude(lon_raw)
+            except ValueError:
+                return
+            
+            # Parser altitude (pieds -> mètres) - peut être None
+            alt_m = self._parse_altitude_m(alt_raw)
+            
+            # Construire les coordonnées RFC 7946
+            # 2D si altitude inconnue, 3D sinon
+            if alt_m is not None:
+                coordinates = [lon_float, lat_float, alt_m]
+            else:
+                coordinates = [lon_float, lat_float]
 
-            # Créer la feature GeoJSON
+            # Créer la feature avec propriétés numériques (RFC 7946 compliant)
             feature = {
                 "type": "Feature",
                 "geometry": {
                     "type": "Point",
-                    "coordinates": [lon_float, lat_float, alt_m]
+                    "coordinates": coordinates
                 },
-                "properties": {
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "sim_time": data.get("sim_time", "—"),
-                    "alt_msl": data.get("alt_msl", "—"),
-                    "alt_agl": data.get("alt_agl", "—"),
-                    "heading_true": data.get("heading_true", "—"),
-                    "heading_mag": data.get("heading_mag", "—"),
-                    "ias": data.get("ias", "—"),
-                    "gs": data.get("gs", "—"),
-                    "power": data.get("power", "—"),
-                    "acf_icao": data.get("acf_icao", "—"),
-                    "acf_name": data.get("acf_name", "—")
-                }
+                "properties": self._build_rfc7946_properties(data)
             }
 
             self._features.append(feature)
@@ -143,7 +205,102 @@ class GeoJSONWriter:
                 "features": self._features
             }
             with open(self.filepath, 'w', encoding='utf-8') as f:
-                json.dump(geojson, f, indent=2, ensure_ascii=False)
+                json.dump(geojson, f, indent=2, ensure_ascii=False, allow_nan=False)
+
+    def _parse_latitude(self, value) -> float:
+        """Parse et valide la latitude. RFC 7946 : doit être entre -90 et 90."""
+        if value is None or value == "—":
+            raise ValueError("Latitude manquante")
+        try:
+            clean = str(value).replace('°', '').strip()
+            result = float(clean)
+        except (ValueError, TypeError):
+            raise ValueError(f"Latitude invalide: {value}")
+        if not (-90 <= result <= 90):
+            raise ValueError(f"Latitude hors plage: {result} (doit être entre -90 et 90)")
+        return result
+
+    def _parse_longitude(self, value) -> float:
+        """Parse et valide la longitude. RFC 7946 : doit être entre -180 et 180."""
+        if value is None or value == "—":
+            raise ValueError("Longitude manquante")
+        try:
+            clean = str(value).replace('°', '').strip()
+            result = float(clean)
+        except (ValueError, TypeError):
+            raise ValueError(f"Longitude invalide: {value}")
+        if not (-180 <= result <= 180):
+            raise ValueError(f"Longitude hors plage: {result} (doit être entre -180 et 180)")
+        return result
+
+    def _parse_altitude_m(self, value) -> Optional[float]:
+        """Parse l'altitude en pieds et convertit en mètres (WGS 84).
+        Retourne None si l'altitude est manquante ou invalide."""
+        if value is None or value == "—":
+            return None
+        try:
+            # Nettoyer : enlever 'ft', virgules, espaces
+            clean = str(value).replace('ft', '').replace(',', '').strip()
+            if not clean:
+                return None
+            alt_ft = float(clean)
+            return alt_ft / M_TO_FT  # Convertir en mètres
+        except (ValueError, TypeError):
+            return None
+
+    def _parse_numeric_value(self, value, unit: str = "") -> Optional[float]:
+        """Parse une valeur numérique depuis une chaîne formatée.
+        Gère les unités (kt, hp, ft, °) et les virgules comme séparateurs de milliers."""
+        if value is None or value == "—":
+            return None
+        try:
+            # Nettoyer la chaîne : enlever unités et virgules
+            clean = str(value)
+            for u in [unit, 'ft', 'kt', 'hp', '°', ',']:
+                clean = clean.replace(u, '').strip()
+            if not clean:
+                return None
+            return float(clean)
+        except (ValueError, TypeError):
+            return None
+
+    def _build_rfc7946_properties(self, data: dict) -> dict:
+        """Construire les propriétés conformes RFC 7946.
+        
+        Tous les valeurs numériques sont stockées comme des nombres (pas de chaînes).
+        Les valeurs manquantes sont null (pas de chaînes comme "—").
+        Les unités sont documentées dans les noms de propriétés ou séparément.
+        """
+        props = {}
+        
+        # Timestamp - toujours présent
+        sim_time = data.get("sim_time")
+        if sim_time and sim_time != "—":
+            props["sim_time"] = str(sim_time)
+        else:
+            props["sim_time"] = datetime.now(timezone.utc).isoformat()
+        
+        # Altitudes en mètres (WGS 84)
+        props["alt_msl_m"] = self._parse_altitude_m(data.get("alt_msl"))
+        props["alt_agl_m"] = self._parse_altitude_m(data.get("alt_agl"))
+        
+        # Caps en degrés
+        props["heading_true_deg"] = self._parse_numeric_value(data.get("heading_true"), "°")
+        props["heading_mag_deg"] = self._parse_numeric_value(data.get("heading_mag"), "°")
+        
+        # Vitesses en kt
+        props["ias_kt"] = self._parse_numeric_value(data.get("ias"), "kt")
+        props["gs_kt"] = self._parse_numeric_value(data.get("gs"), "kt")
+        
+        # Puissance en hp
+        props["power_hp"] = self._parse_numeric_value(data.get("power"), "hp")
+        
+        # Appareil (chaînes)
+        props["acf_icao"] = data.get("acf_icao") or None
+        props["acf_name"] = data.get("acf_name") or None
+        
+        # Nettoyer : supprimer les clés avec valeur None
+        return {k: v for k, v in props.items() if v is not None}
 
 # ---------------------------------------------------------------------------
 # Interface de base pour les moniteurs
@@ -160,7 +317,9 @@ class BaseSimulatorMonitor(ABC):
     def __init__(self, geojson_path: str, poll_interval: float = 1.0):
         """
         Args:
-            geojson_path: Chemin vers le fichier GeoJSON de sortie
+            geojson_path: Chemin vers le fichier de sortie.
+                         Accepte .json ou .geojson (RFC 7946).
+                         Si aucune extension, .json est ajouté automatiquement.
             poll_interval: Intervalle de polling en secondes (default: 1.0)
         """
         self.geojson_writer = GeoJSONWriter(geojson_path)
@@ -308,7 +467,7 @@ class MSFSMonitor(BaseSimulatorMonitor):
     def __init__(self, geojson_path: str, poll_interval: float = 1.0):
         """
         Args:
-            geojson_path: Chemin vers le fichier GeoJSON de sortie
+            geojson_path: Chemin vers le fichier de sortie (.json ou .geojson)
             poll_interval: Intervalle de polling en secondes
         """
         super().__init__(geojson_path, poll_interval)
@@ -551,7 +710,7 @@ class XPlaneMonitor(BaseSimulatorMonitor):
     ):
         """
         Args:
-            geojson_path: Chemin vers le fichier GeoJSON de sortie
+            geojson_path: Chemin vers le fichier de sortie (.json ou .geojson)
             host: Adresse IP de X-Plane (default: 127.0.0.1)
             port: Port de l'API REST X-Plane (default: 8086)
             poll_interval: Intervalle de polling en secondes
@@ -663,7 +822,9 @@ def create_monitor(
     
     Args:
         simulator_type: Type de simulateur - "msfs" ou "xplane"
-        geojson_path: Chemin vers le fichier GeoJSON de sortie
+        geojson_path: Chemin vers le fichier de sortie.
+                     Accepte .json (recommandé) ou .geojson.
+                     Si aucune extension, .json est ajouté automatiquement.
         poll_interval: Intervalle de polling en secondes (default: 1.0)
         host: Adresse IP pour X-Plane (ignoré pour MSFS, default: 127.0.0.1)
         port: Port pour X-Plane (ignoré pour MSFS, default: 8086)
@@ -675,13 +836,20 @@ def create_monitor(
         ValueError: Si simulator_type est invalide
     
     Exemple:
+        >>> # Avec extension .json (recommandé)
         >>> monitor = create_monitor(
         ...     simulator_type="xplane",
-        ...     geojson_path="/tmp/flight_track.geojson",
+        ...     geojson_path="/tmp/flight_track.json",
         ...     poll_interval=1.0
         ... )
         >>> monitor.set_connection_callback(lambda c, m: print(m))
         >>> monitor.start_monitoring()
+        
+        >>> # Avec extension .geojson
+        >>> monitor = create_monitor(
+        ...     simulator_type="msfs",
+        ...     geojson_path="/tmp/track.geojson"
+        ... )
     """
     if simulator_type == SimulatorType.MSFS.value:
         return MSFSMonitor(geojson_path, poll_interval)
