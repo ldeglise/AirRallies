@@ -114,27 +114,31 @@ class TranslationManager:
     _lock = threading.Lock()
     
     def __new__(cls):
-        with cls._lock:
+        with TranslationManager._lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
                 cls._instance._current_language: Optional[str] = None
                 cls._instance._custom_translations: Dict[str, Dict[str, str]] = {}
             return cls._instance
     
+    def _detect_system_language(self) -> str:
+        """Détecte la langue du système. Retourne 'en' si la détection échoue."""
+        import locale
+        try:
+            lang = locale.getdefaultlocale()[0]
+            if lang is not None:
+                lang = lang[:2]  # Prendre seulement le code langue
+            else:
+                lang = "en"
+        except Exception:
+            lang = "en"
+        return lang
+    
     def set_language(self, lang: Optional[str] = None) -> None:
         """Définit la langue active."""
         with self._lock:
             if lang is None:
-                import locale
-                try:
-                    lang = locale.getdefaultlocale()[0]
-                except Exception:
-                    lang = None
-                
-                if lang is None:
-                    lang = "en"
-                else:
-                    lang = lang[:2]
+                lang = self._detect_system_language()
             
             if lang not in _AVAILABLE_TRANSLATIONS and lang not in self._custom_translations:
                 lang = "en"
@@ -154,8 +158,11 @@ class TranslationManager:
         with self._lock:
             lang = self._current_language
             if lang is None:
-                self.set_language()
-                lang = self._current_language
+                # Détecter la langue système sans acquérir le lock à nouveau
+                lang = self._detect_system_language()
+                if lang not in _AVAILABLE_TRANSLATIONS and lang not in self._custom_translations:
+                    lang = "en"
+                self._current_language = lang
             
             translations = _AVAILABLE_TRANSLATIONS.get(lang, {}).copy()
             translations.update(self._custom_translations.get(lang, {}))
@@ -176,7 +183,8 @@ class TranslationManager:
 # ---------------------------------------------------------------------------
 
 _translation_manager = TranslationManager()
-_translation_manager.set_language("fr")
+# La langue sera détectée automatiquement lors du premier appel à gettext()
+# ou peut être définie explicitement via set_language()
 
 
 def set_language(lang: Optional[str] = None) -> None:
