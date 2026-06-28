@@ -119,7 +119,7 @@ class GeoJSONWriter:
             ValueError: Si le chemin est vide ou invalide.
         """
         if not filepath:
-            raise ValueError(_("Le chemin du fichier ne peut pas être vide"))
+            raise ValueError(_("FILE_PATH_EMPTY"))
         
         # Normaliser le chemin et vérifier l'extension
         self.filepath = self._normalize_filepath(filepath)
@@ -259,27 +259,27 @@ class GeoJSONWriter:
     def _parse_latitude(self, value) -> float:
         """Parse et valide la latitude. RFC 7946 : doit être entre -90 et 90."""
         if value is None or value == "—":
-            raise ValueError(_("Latitude manquante"))
+            raise ValueError(_("LATITUDE_MISSING"))
         try:
             clean = str(value).replace('°', '').strip()
             result = float(clean)
         except (ValueError, TypeError):
-            raise ValueError(_("Latitude invalide: {value}", value=value))
+            raise ValueError(_("LATITUDE_INVALID", value=value))
         if not (-90 <= result <= 90):
-            raise ValueError(_("Latitude hors plage: {result} (doit être entre -90 et 90)", result=result))
+            raise ValueError(_("LATITUDE_OUT_OF_RANGE", result=result))
         return result
 
     def _parse_longitude(self, value) -> float:
         """Parse et valide la longitude. RFC 7946 : doit être entre -180 et 180."""
         if value is None or value == "—":
-            raise ValueError(_("Longitude manquante"))
+            raise ValueError(_("LONGITUDE_MISSING"))
         try:
             clean = str(value).replace('°', '').strip()
             result = float(clean)
         except (ValueError, TypeError):
-            raise ValueError(_("Longitude invalide: {value}", value=value))
+            raise ValueError(_("LONGITUDE_INVALID", value=value))
         if not (-180 <= result <= 180):
-            raise ValueError(_("Longitude hors plage: {result} (doit être entre -180 et 180)", result=result))
+            raise ValueError(_("LONGITUDE_OUT_OF_RANGE", result=result))
         return result
 
     def _parse_altitude_m(self, value) -> Optional[float]:
@@ -507,7 +507,7 @@ class BaseSimulatorMonitor(ABC):
                 self._flight_state = FlightState.IN_FLIGHT
                 self._notify_connection_status(
                     True, 
-                    _("Décollage détecté - Enregistrement démarré")
+                    _("TAKEOFF_DETECTED")
                 )
                 return True  # Enregistrer ce point
             return False
@@ -518,7 +518,7 @@ class BaseSimulatorMonitor(ABC):
                 self._flight_state = FlightState.LANDED
                 self._notify_connection_status(
                     True,
-                    _("Atterrissage détecté - Enregistrement arrêté")
+                    _("LANDING_DETECTED")
                 )
                 return False  # Ne pas enregistrer
             return True  # Enregistrer
@@ -625,7 +625,7 @@ class BaseSimulatorMonitor(ABC):
         self.disconnect()
         self._flight_state = FlightState.WAITING
         self._data_history.clear()
-        self._notify_connection_status(False, _("Monitoring arrêté"))
+        self._notify_connection_status(False, _("MONITORING_STOPPED"))
 
     def _monitor_loop(self) -> None:
         """
@@ -638,12 +638,12 @@ class BaseSimulatorMonitor(ABC):
         if not self.connect():
             self._notify_connection_status(
                 False,
-                _("Échec de la connexion initiale au simulateur")
+                _("INITIAL_CONNECTION_FAILED")
             )
             self._running = False
             return
 
-        self._notify_connection_status(True, _("Connecté au simulateur - En attente de décollage"))
+        self._notify_connection_status(True, _("CONNECTED_WAITING_TAKEOFF"))
 
         # Boucle de polling
         while self._running:
@@ -671,12 +671,12 @@ class BaseSimulatorMonitor(ABC):
             except Exception as e:
                 self._notify_connection_status(
                     False,
-                    _("Erreur lors de la récupération des données: {error}", error=str(e))
+                    _("DATA_RETRIEVAL_ERROR", error=str(e))
                 )
                 self._running = False
                 break
 
-        self._notify_connection_status(False, _("Déconnecté"))
+        self._notify_connection_status(False, _("DISCONNECTED"))
 
 # ---------------------------------------------------------------------------
 # Moniteur MSFS (SimConnect)
@@ -715,13 +715,13 @@ class MSFSMonitor(BaseSimulatorMonitor):
         except ImportError:
             self._notify_connection_status(
                 False,
-                _("Module SimConnect non installé (Windows uniquement)")
+                _("SIMCONNECT_NOT_INSTALLED")
             )
             return False
         except Exception as e:
             self._notify_connection_status(
                 False,
-                _("Échec de connexion SimConnect: {error}", error=str(e))
+                _("SIMCONNECT_CONNECTION_FAILED", error=str(e))
             )
             return False
 
@@ -856,7 +856,7 @@ class _XPlaneAPI:
             resp.raise_for_status()
             records = resp.json()["data"]
             if not records:
-                raise ValueError(_("Dataref introuvable: {path}", path=path))
+                raise ValueError(_("DATAREF_NOT_FOUND", path=path))
             self._cache[key] = records[0]["id"]
             self._types[key] = records[0]["value_type"]
 
@@ -965,13 +965,13 @@ class XPlaneMonitor(BaseSimulatorMonitor):
         except ImportError:
             self._notify_connection_status(
                 False,
-                _("Module 'requests' non installé")
+                _("REQUESTS_NOT_INSTALLED")
             )
             return False
         except Exception as e:
             self._notify_connection_status(
                 False,
-                _("Échec de connexion X-Plane: {error}", error=str(e))
+                _("XPLANE_CONNECTION_FAILED", error=str(e))
             )
             return False
 
@@ -1095,7 +1095,7 @@ def create_monitor(
         return XPlaneMonitor(geojson_path, host, port, poll_interval, include_trajectory)
     else:
         raise ValueError(
-            _("Type de simulateur inconnu: '{simulator_type}'. Utilisez '{msfs}' ou '{xplane}'",
+            _("UNKNOWN_SIMULATOR_TYPE",
               simulator_type=simulator_type, msfs=SimulatorType.MSFS.value, xplane=SimulatorType.XPLANE.value)
         )
 
