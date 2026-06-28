@@ -3,7 +3,7 @@ Simulator Monitor - Module unifié pour MSFS/P3D et X-Plane 12
 Enregistre les données de vol en temps réel dans un fichier GeoJSON (RFC 7946).
 
 Utilisation :
-    from sim_monitor import create_monitor, SimulatorType
+    from sim_monitor import create_monitor, SimulatorType, FlightState
     
     # Version basique : uniquement des Points (pour analyses)
     monitor = create_monitor(
@@ -38,6 +38,11 @@ Notes :
       * Une Feature LineString (trajectoire complète)
       * Les Features Point individuelles (pour analyses)
     - Sans include_trajectory (défaut), seul les Points sont enregistrés.
+    
+    Détection automatique décollage/atterrissage:
+    - L'enregistrement commence automatiquement au décollage (GS > 30kt ET AGL > 0 pendant > 5s)
+    - L'enregistrement s'arrête automatiquement à l'atterrissage (GS <= 30kt ET AGL = 0 pendant > 5s)
+    - Utilise monitor.flight_state pour connaître l'état actuel (WAITING, IN_FLIGHT, LANDED)
 
 Auteurs : Adapté des moniteurs originaux MSFS et X-Plane
 """
@@ -49,7 +54,7 @@ import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Deque
 
 # ---------------------------------------------------------------------------
 # Types et constantes
@@ -59,6 +64,13 @@ class SimulatorType(Enum):
     """Types de simulateurs supportés."""
     MSFS = "msfs"
     XPLANE = "xplane"
+
+
+class FlightState(Enum):
+    """États de vol pour la détection décollage/atterrissage."""
+    WAITING = "waiting"      # En attente du décollage
+    IN_FLIGHT = "in_flight"  # En vol (enregistrement actif)
+    LANDED = "landed"        # Atterrissage détecté (arrêt enregistrement)
 
 
 # Constantes de conversion
@@ -346,7 +358,18 @@ class BaseSimulatorMonitor(ABC):
     
     Fournit une interface unifiée pour la connexion, la déconnexion,
     et la récupération des données de vol.
+    
+    Détection automatique du décollage et atterrissage:
+    - Décollage: GS > 30kt ET altitude AGL > 0 pendant > 5 secondes
+    - Atterrissage: GS <= 30kt ET altitude AGL = 0 pendant > 5 secondes
     """
+
+    # Critères de détection (en unités simulation: kt et pieds)
+    TAKEOFF_GS_THRESHOLD_KT = 30.0
+    TAKEOFF_AGL_THRESHOLD_FT = 0.0
+    LANDING_GS_THRESHOLD_KT = 30.0
+    LANDING_AGL_THRESHOLD_FT = 0.0
+    DETECTION_DURATION_SEC = 5.0
 
     def __init__(self, geojson_path: str, poll_interval: float = 1.0, include_trajectory: bool = False):
         """
@@ -365,6 +388,16 @@ class BaseSimulatorMonitor(ABC):
         self._connection_callback: Optional[Callable[[bool, str], None]] = None
         self._monitor_thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
+        
+        # État de vol pour détection décollage/atterrissage
+        self._flight_state = FlightState.WAITING
+        
+        # Historique des données pour détection sur durée
+        # Chaque entrée: (gs_kt, alt_agl_ft, timestamp)
+        self._data_history: Deque[tuple[float, float, datetime]] = Deque()
+        
+        # Durée minimale pour la détection (en secondes)
+        self._detection_duration = self.DETECTION_DURATION_SEC
 
     @abstractmethod
     def connect(self) -> bool:
@@ -405,6 +438,144 @@ class BaseSimulatorMonitor(ABC):
         """
         self._connection_callback = callback
 
+    @property
+    def flight_state(self) -> FlightState:
+        """Retourne l'état de vol actuel."""
+        return self._flight_state
+
+    def _parse_gs_kt(self, data: dict) -> Optional[float]:
+        """Extrait la vitesse sol (GS) en kt depuis les données."""
+        gs_raw = data.get("gs")
+        if gs_raw is None or gs_raw == "—":
+            return None
+        try:
+            clean = str(gs_raw).replace('kt', '').replace(',', '').strip()
+            if clean:
+                return float(clean)
+        except (ValueError, TypeError):
+            pass
+        return None
+
+    def _parse_alt_agl_ft(self, data: dict) -> Optional[float]:
+        """Extrait l'altitude AGL en pieds depuis les données."""
+        alt_agl_raw = data.get("alt_agl")
+        if alt_agl_raw is None or alt_agl_raw == "—":
+            return None
+        try:
+            clean = str(alt_agl_raw).replace('ft', '').replace(',', '').strip()
+            if clean:
+                return float(clean)
+        except (ValueError, TypeError):
+            pass
+        return None
+
+    def _update_flight_state(self, data: dict) -> bool:
+        """
+        Met à jour l'état de vol et vérifie si on doit enregistrer le point.
+        
+        Args:
+            data: Dictionnaire des données du simulateur
+            
+        Returns:
+            True si le point doit être enregistré, False sinon
+        """
+        now = datetime.now(timezone.utc)
+        
+        # Extraire GS et AGL
+        gs_kt = self._parse_gs_kt(data)
+        alt_agl_ft = self._parse_alt_agl_ft(data)
+        
+        # Si on ne peut pas extraire les données nécessaires, on garde l'état actuel
+        if gs_kt is None or alt_agl_ft is None:
+            # Nettoyer l'historique trop vieux
+            self._clean_old_history(now)
+            return self._flight_state == FlightState.IN_FLIGHT
+        
+        # Ajouter à l'historique
+        self._data_history.append((gs_kt, alt_agl_ft, now))
+        
+        # Nettoyer l'historique (garder seulement les données des dernières DETECTION_DURATION_SEC)
+        self._clean_old_history(now)
+        
+        # Vérifier les conditions selon l'état actuel
+        if self._flight_state == FlightState.WAITING:
+            # Vérifier si conditions de décollage sont remplies
+            if self._check_takeoff_condition():
+                self._flight_state = FlightState.IN_FLIGHT
+                self._notify_connection_status(
+                    True, 
+                    "Décollage détecté - Enregistrement démarré"
+                )
+                return True  # Enregistrer ce point
+            return False
+            
+        elif self._flight_state == FlightState.IN_FLIGHT:
+            # Vérifier si conditions d'atterrissage sont remplies
+            if self._check_landing_condition():
+                self._flight_state = FlightState.LANDED
+                self._notify_connection_status(
+                    True,
+                    "Atterrissage détecté - Enregistrement arrêté"
+                )
+                return False  # Ne pas enregistrer
+            return True  # Enregistrer
+            
+        elif self._flight_state == FlightState.LANDED:
+            # Plus d'enregistrement une fois atterri
+            return False
+        
+        return self._flight_state == FlightState.IN_FLIGHT
+
+    def _clean_old_history(self, now: datetime) -> None:
+        """Nettoie l'historique des données trop anciennes."""
+        cutoff = now - timedelta(seconds=self._detection_duration)
+        while self._data_history and self._data_history[0][2] < cutoff:
+            self._data_history.popleft()
+
+    def _check_takeoff_condition(self) -> bool:
+        """
+        Vérifie si les conditions de décollage sont remplies:
+        GS > 30kt ET altitude AGL > 0 pendant > 5 secondes.
+        """
+        if len(self._data_history) < 2:
+            return False
+        
+        # Tolérance pour les comparaisons de flottants
+        agl_tolerance_ft = 1.0  # 1 pied de tolérance
+        
+        # Vérifier que TOUTES les entrées de l'historique remplissent les conditions
+        for gs_kt, alt_agl_ft, _ in self._data_history:
+            if gs_kt <= self.TAKEOFF_GS_THRESHOLD_KT or alt_agl_ft <= self.TAKEOFF_AGL_THRESHOLD_FT + agl_tolerance_ft:
+                return False
+        
+        # Vérifier que la durée couverte par l'historique est >= DETECTION_DURATION_SEC
+        first_time = self._data_history[0][2]
+        last_time = self._data_history[-1][2]
+        duration = (last_time - first_time).total_seconds()
+        return duration >= self._detection_duration
+
+    def _check_landing_condition(self) -> bool:
+        """
+        Vérifie si les conditions d'atterrissage sont remplies:
+        GS <= 30kt ET altitude AGL = 0 pendant > 5 secondes.
+        """
+        if len(self._data_history) < 2:
+            return False
+        
+        # Tolérance pour les comparaisons de flottants
+        agl_tolerance_ft = 1.0  # 1 pied de tolérance
+        
+        # Vérifier que TOUTES les entrées de l'historique remplissent les conditions
+        for gs_kt, alt_agl_ft, _ in self._data_history:
+            if gs_kt > self.LANDING_GS_THRESHOLD_KT or abs(alt_agl_ft) > agl_tolerance_ft:
+                return False
+        
+        # Vérifier que la durée couverte par l'historique est >= DETECTION_DURATION_SEC
+        first_time = self._data_history[0][2]
+        last_time = self._data_history[-1][2]
+        duration = (last_time - first_time).total_seconds()
+        return duration >= self._detection_duration
+
     def _notify_connection_status(self, connected: bool, message: str) -> None:
         """
         Notifie le callback de changement de statut de connexion.
@@ -424,10 +595,15 @@ class BaseSimulatorMonitor(ABC):
         
         Le monitoring récupère les données toutes les `poll_interval` secondes
         et les enregistre dans le fichier GeoJSON.
+        L'enregistrement commence automatiquement au décollage et s'arrête à l'atterrissage.
         """
         if self._running:
             return
 
+        # Réinitialiser l'état de vol et l'historique
+        self._flight_state = FlightState.WAITING
+        self._data_history.clear()
+        
         self._running = True
         self._monitor_thread = threading.Thread(
             target=self._monitor_loop,
@@ -444,12 +620,16 @@ class BaseSimulatorMonitor(ABC):
             self._monitor_thread.join(timeout=5.0)
             self._monitor_thread = None
         self.disconnect()
+        self._flight_state = FlightState.WAITING
+        self._data_history.clear()
         self._notify_connection_status(False, "Monitoring arrêté")
 
     def _monitor_loop(self) -> None:
         """
         Boucle principale de monitoring.
         Doit être appelée dans un thread séparé.
+        
+        Enregistre uniquement les points entre le décollage et l'atterrissage.
         """
         # Tentative de connexion initiale
         if not self.connect():
@@ -460,15 +640,24 @@ class BaseSimulatorMonitor(ABC):
             self._running = False
             return
 
-        self._notify_connection_status(True, "Connecté au simulateur")
+        self._notify_connection_status(True, "Connecté au simulateur - En attente de décollage")
 
         # Boucle de polling
         while self._running:
             try:
                 data = self.get_data()
                 if data:
-                    # Enregistrer dans GeoJSON
-                    self.geojson_writer.add_point(data)
+                    # Vérifier si on doit enregistrer ce point (selon état de vol)
+                    should_record = self._update_flight_state(data)
+                    
+                    if should_record:
+                        # Enregistrer dans GeoJSON
+                        self.geojson_writer.add_point(data)
+                    
+                    # Si atterrissage détecté, on peut s'arrêter automatiquement
+                    if self._flight_state == FlightState.LANDED:
+                        self._running = False
+                        break
                 
                 # Attendre l'intervalle de polling
                 for _ in range(int(self.poll_interval * 10)):
