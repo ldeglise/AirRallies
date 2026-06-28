@@ -23,6 +23,7 @@
 ## 🎯 Présentation
 
 Le module **sim_monitor** fournit une interface unifiée pour :
+
 - **Enregistrer** les données de vol en temps réel depuis **MSFS 2020/2024**, **P3D** ou **X-Plane 12**
 - **Stocker** les données au format **GeoJSON** (conforme RFC 7946)
 - **Détecter automatiquement** le décollage et l'atterrissage
@@ -396,6 +397,7 @@ if check_simulator_available(SimulatorType.MSFS.value):
 ## 📡 Messages de Callback
 
 Le callback est appelé avec deux paramètres :
+
 - `connected: bool` - État de la connexion
 - `message: str` - Message décrivant l'événement
 
