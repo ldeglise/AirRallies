@@ -5,7 +5,7 @@ Enregistre les données de vol en temps réel dans un fichier GeoJSON (RFC 7946)
 Utilisation :
     from sim_monitor import create_monitor, SimulatorType
     
-    # Avec extension .json (recommandé pour l'interopérabilité)
+    # Version basique : uniquement des Points (pour analyses)
     monitor = create_monitor(
         simulator_type=SimulatorType.XPLANE.value,
         geojson_path="/chemin/vers/fichier.json",
@@ -14,11 +14,12 @@ Utilisation :
         port=8086
     )
     
-    # ou avec extension .geojson (convention géospatiale)
+    # Version avec trajectoire : Points + LineString (pour QGIS)
     monitor = create_monitor(
         simulator_type=SimulatorType.XPLANE.value,
         geojson_path="/chemin/vers/trajectoire.geojson",
-        poll_interval=1.0
+        poll_interval=1.0,
+        include_trajectory=True  # Ajoute une LineString pour visualisation
     )
     
     monitor.set_connection_callback(lambda connected, msg: print(f"Statut: {connected}, {msg}"))
@@ -31,7 +32,12 @@ Dépendances :
     - Pour X-Plane : pip install requests
     - Pour MSFS/P3D : pip install SimConnect (Windows uniquement)
 
-Note : Les extensions .json et .geojson sont toutes deux conformes à la RFC 7946.
+Notes :
+    - Les extensions .json et .geojson sont toutes deux conformes à la RFC 7946.
+    - Avec include_trajectory=True, le GeoJSON contient :
+      * Une Feature LineString (trajectoire complète)
+      * Les Features Point individuelles (pour analyses)
+    - Sans include_trajectory (défaut), seul les Points sont enregistrés.
 
 Auteurs : Adapté des moniteurs originaux MSFS et X-Plane
 """
@@ -84,12 +90,15 @@ class GeoJSONWriter:
     # Extensions valides selon RFC 7946
     VALID_EXTENSIONS = (".json", ".geojson")
 
-    def __init__(self, filepath: str):
+    def __init__(self, filepath: str, include_trajectory: bool = False):
         """
         Args:
             filepath: Chemin complet vers le fichier de sortie.
                      Accepte .json ou .geojson (RFC 7946).
                      Si aucune extension ou extension invalide, .json est ajouté.
+            include_trajectory: Si True, ajoute une LineString connectant 
+                               tous les points pour une meilleure visualisation 
+                               dans QGIS (défaut: False pour rétrocompatibilité).
         
         Raises:
             ValueError: Si le chemin est vide ou invalide.
@@ -101,6 +110,8 @@ class GeoJSONWriter:
         self.filepath = self._normalize_filepath(filepath)
         
         self._features = []
+        self._trajectory_coords = []  # Coordonnées pour la LineString
+        self._include_trajectory = include_trajectory
         self._lock = threading.Lock()
         
         # Créer le dossier parent s'il n'existe pas
@@ -109,7 +120,7 @@ class GeoJSONWriter:
             os.makedirs(dirname, exist_ok=True)
         
         # Écrire l'en-tête initial
-        self._write_initial()
+        self._write_all()
     
     def _normalize_filepath(self, filepath: str) -> str:
         """
@@ -142,14 +153,35 @@ class GeoJSONWriter:
         # Sinon, retourner avec extension en minuscules
         return f"{base}{ext_lower}"
 
-    def _write_initial(self):
-        """Écrit le squelette GeoJSON initial."""
+    def _write_all(self):
+        """Écrit le fichier GeoJSON complet avec points et éventuellement la trajectoire."""
+        features = self._features.copy()
+        
+        # Ajouter la LineString de trajectoire en premier si activé
+        if self._include_trajectory and len(self._trajectory_coords) >= 2:
+            trajectory_feature = {
+                "type": "Feature",
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": self._trajectory_coords
+                },
+                "properties": {
+                    "type": "trajectory",
+                    "point_count": len(self._trajectory_coords),
+                    "acf_icao": self._features[-1]["properties"].get("acf_icao") if self._features else None,
+                    "acf_name": self._features[-1]["properties"].get("acf_name") if self._features else None,
+                    "start_time": self._features[0]["properties"].get("sim_time") if self._features else None,
+                    "end_time": self._features[-1]["properties"].get("sim_time") if self._features else None
+                }
+            }
+            features.insert(0, trajectory_feature)
+        
         geojson = {
             "type": "FeatureCollection",
-            "features": self._features
+            "features": features
         }
         with open(self.filepath, 'w', encoding='utf-8') as f:
-            json.dump(geojson, f, indent=2, ensure_ascii=False)
+            json.dump(geojson, f, indent=2, ensure_ascii=False, allow_nan=False)
 
     def add_point(self, data: dict) -> None:
         """
@@ -198,14 +230,16 @@ class GeoJSONWriter:
             }
 
             self._features.append(feature)
+            
+            # Ajouter les coordonnées à la trajectoire si activé
+            if self._include_trajectory:
+                if alt_m is not None:
+                    self._trajectory_coords.append([lon_float, lat_float, alt_m])
+                else:
+                    self._trajectory_coords.append([lon_float, lat_float])
 
-            # Réécrire le fichier complet
-            geojson = {
-                "type": "FeatureCollection",
-                "features": self._features
-            }
-            with open(self.filepath, 'w', encoding='utf-8') as f:
-                json.dump(geojson, f, indent=2, ensure_ascii=False, allow_nan=False)
+            # Réécrire le fichier complet (avec trajectoire si activée)
+            self._write_all()
 
     def _parse_latitude(self, value) -> float:
         """Parse et valide la latitude. RFC 7946 : doit être entre -90 et 90."""
@@ -314,15 +348,17 @@ class BaseSimulatorMonitor(ABC):
     et la récupération des données de vol.
     """
 
-    def __init__(self, geojson_path: str, poll_interval: float = 1.0):
+    def __init__(self, geojson_path: str, poll_interval: float = 1.0, include_trajectory: bool = False):
         """
         Args:
             geojson_path: Chemin vers le fichier de sortie.
                          Accepte .json ou .geojson (RFC 7946).
                          Si aucune extension, .json est ajouté automatiquement.
             poll_interval: Intervalle de polling en secondes (default: 1.0)
+            include_trajectory: Si True, ajoute une LineString pour visualiser 
+                               la trajectoire dans QGIS (défaut: False).
         """
-        self.geojson_writer = GeoJSONWriter(geojson_path)
+        self.geojson_writer = GeoJSONWriter(geojson_path, include_trajectory)
         self.poll_interval = poll_interval
         self._running = False
         self._connected = False
@@ -464,13 +500,14 @@ class MSFSMonitor(BaseSimulatorMonitor):
 
     MAX_ENGINES = 4
 
-    def __init__(self, geojson_path: str, poll_interval: float = 1.0):
+    def __init__(self, geojson_path: str, poll_interval: float = 1.0, include_trajectory: bool = False):
         """
         Args:
             geojson_path: Chemin vers le fichier de sortie (.json ou .geojson)
             poll_interval: Intervalle de polling en secondes
+            include_trajectory: Si True, ajoute une LineString pour QGIS
         """
-        super().__init__(geojson_path, poll_interval)
+        super().__init__(geojson_path, poll_interval, include_trajectory)
         self._sm = None
         self._aq = None
 
@@ -706,7 +743,8 @@ class XPlaneMonitor(BaseSimulatorMonitor):
         geojson_path: str,
         host: str = "127.0.0.1",
         port: int = 8086,
-        poll_interval: float = 1.0
+        poll_interval: float = 1.0,
+        include_trajectory: bool = False
     ):
         """
         Args:
@@ -714,8 +752,9 @@ class XPlaneMonitor(BaseSimulatorMonitor):
             host: Adresse IP de X-Plane (default: 127.0.0.1)
             port: Port de l'API REST X-Plane (default: 8086)
             poll_interval: Intervalle de polling en secondes
+            include_trajectory: Si True, ajoute une LineString pour QGIS
         """
-        super().__init__(geojson_path, poll_interval)
+        super().__init__(geojson_path, poll_interval, include_trajectory)
         self.host = host
         self.port = port
         self._api = _XPlaneAPI(host, port)
@@ -815,7 +854,8 @@ def create_monitor(
     geojson_path: str,
     poll_interval: float = 1.0,
     host: str = "127.0.0.1",
-    port: int = 8086
+    port: int = 8086,
+    include_trajectory: bool = False
 ) -> BaseSimulatorMonitor:
     """
     Factory pour créer un moniteur de simulateur.
@@ -828,6 +868,10 @@ def create_monitor(
         poll_interval: Intervalle de polling en secondes (default: 1.0)
         host: Adresse IP pour X-Plane (ignoré pour MSFS, default: 127.0.0.1)
         port: Port pour X-Plane (ignoré pour MSFS, default: 8086)
+        include_trajectory: Si True, ajoute une LineString dans le GeoJSON 
+                          pour une meilleure visualisation dans QGIS.
+                          Les points individuels sont toujours conservés pour 
+                          les analyses (default: False).
     
     Returns:
         Instance de MSFSMonitor ou XPlaneMonitor
@@ -845,16 +889,18 @@ def create_monitor(
         >>> monitor.set_connection_callback(lambda c, m: print(m))
         >>> monitor.start_monitoring()
         
-        >>> # Avec extension .geojson
+        >>> # Avec extension .geojson et trajectoire pour QGIS
         >>> monitor = create_monitor(
         ...     simulator_type="msfs",
-        ...     geojson_path="/tmp/track.geojson"
+        ...     geojson_path="/tmp/track.geojson",
+        ...     include_trajectory=True
         ... )
+        >>> monitor.start_monitoring()
     """
     if simulator_type == SimulatorType.MSFS.value:
-        return MSFSMonitor(geojson_path, poll_interval)
+        return MSFSMonitor(geojson_path, poll_interval, include_trajectory)
     elif simulator_type == SimulatorType.XPLANE.value:
-        return XPlaneMonitor(geojson_path, host, port, poll_interval)
+        return XPlaneMonitor(geojson_path, host, port, poll_interval, include_trajectory)
     else:
         raise ValueError(
             f"Type de simulateur inconnu: '{simulator_type}'. "
