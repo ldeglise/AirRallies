@@ -112,13 +112,15 @@ class TranslationManager:
     
     _instance: Optional['TranslationManager'] = None
     _lock = threading.Lock()
+    _current_language: Optional[str]
+    _custom_translations: Dict[str, Dict[str, str]]
     
     def __new__(cls):
         with TranslationManager._lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
-                cls._instance._current_language: Optional[str] = None
-                cls._instance._custom_translations: Dict[str, Dict[str, str]] = {}
+                cls._instance._current_language = None
+                cls._instance._custom_translations = {}
             return cls._instance
     
     def _detect_system_language(self) -> str:
