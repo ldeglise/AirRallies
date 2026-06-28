@@ -22,6 +22,13 @@ Utilisation :
         include_trajectory=True  # Ajoute une LineString pour visualisation
     )
     
+    # Version avec connexion manuelle (pour GUI futur)
+    monitor = create_monitor(
+        simulator_type=SimulatorType.XPLANE.value,
+        geojson_path="/chemin/vers/fichier.json",
+        auto_connect=False  # L'utilisateur appelle monitor.connect() manuellement
+    )
+    
     monitor.set_connection_callback(lambda connected, msg: print(f"Statut: {connected}, {msg}"))
     monitor.start_monitoring()
     
@@ -38,6 +45,13 @@ Notes :
       * Une Feature LineString (trajectoire complète)
       * Les Features Point individuelles (pour analyses)
     - Sans include_trajectory (défaut), seul les Points sont enregistrés.
+    
+    Modes de connexion:
+    - Par défaut (auto_connect=True) : la connexion au simulateur est tentée automatiquement
+      au démarrage du monitoring, avec reconnexion automatique en cas de perte.
+    - En mode manuel (auto_connect=False) : la connexion n'est pas tentée automatiquement.
+      L'utilisateur doit appeler monitor.connect() manuellement (via le GUI).
+      Utilise monitor.is_connected et monitor.auto_connect pour connaître l'état.
     
     Détection automatique décollage/atterrissage:
     - L'enregistrement commence automatiquement au décollage (GS > 30kt ET AGL > 0 pendant > 5s)
@@ -374,7 +388,7 @@ class BaseSimulatorMonitor(ABC):
     LANDING_AGL_THRESHOLD_FT = 0.0
     DETECTION_DURATION_SEC = 5.0
 
-    def __init__(self, geojson_path: str, poll_interval: float = 1.0, include_trajectory: bool = False):
+    def __init__(self, geojson_path: str, poll_interval: float = 1.0, include_trajectory: bool = False, auto_connect: bool = True):
         """
         Args:
             geojson_path: Chemin vers le fichier de sortie.
@@ -383,6 +397,10 @@ class BaseSimulatorMonitor(ABC):
             poll_interval: Intervalle de polling en secondes (default: 1.0)
             include_trajectory: Si True, ajoute une LineString pour visualiser 
                                la trajectoire dans QGIS (défaut: False).
+            auto_connect: Si True (défaut), la connexion au simulateur est 
+                         tentée automatiquement au démarrage du monitoring.
+                         Si False, l'utilisateur doit appeler connect() manuellement
+                         (via le GUI futur).
         """
         self.geojson_writer = GeoJSONWriter(geojson_path, include_trajectory)
         self.poll_interval = poll_interval
@@ -391,6 +409,7 @@ class BaseSimulatorMonitor(ABC):
         self._connection_callback: Optional[Callable[[bool, str], None]] = None
         self._monitor_thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
+        self._auto_connect = auto_connect
         
         # État de vol pour détection décollage/atterrissage
         self._flight_state = FlightState.WAITING
@@ -403,14 +422,31 @@ class BaseSimulatorMonitor(ABC):
         self._detection_duration = self.DETECTION_DURATION_SEC
 
     @abstractmethod
-    def connect(self) -> bool:
+    def _do_connect(self) -> bool:
         """
-        Établit la connexion au simulateur.
+        Établit la connexion au simulateur (implémentation spécifique).
         
         Returns:
             True si la connexion a réussi, False sinon
         """
         pass
+
+    def connect(self) -> bool:
+        """
+        Établit la connexion au simulateur et notifie le callback.
+        Peut être appelée manuellement par l'utilisateur (via GUI).
+        
+        Returns:
+            True si la connexion a réussi, False sinon
+        """
+        result = self._do_connect()
+        if result:
+            self._notify_connection_status(True, _("CONNECTED"))
+        else:
+            # en cas d'erreur, notifier avec un message générique
+            # (les implémentations peuvent fournir plus de détails via _do_connect)
+            self._notify_connection_status(False, _("CONNECTION_FAILED"))
+        return result
 
     @abstractmethod
     def disconnect(self) -> None:
@@ -445,6 +481,11 @@ class BaseSimulatorMonitor(ABC):
     def flight_state(self) -> FlightState:
         """Retourne l'état de vol actuel."""
         return self._flight_state
+
+    @property
+    def auto_connect(self) -> bool:
+        """Retourne True si la connexion automatique est activée."""
+        return self._auto_connect
 
     def _parse_gs_kt(self, data: dict) -> Optional[float]:
         """Extrait la vitesse sol (GS) en kt depuis les données."""
@@ -634,20 +675,43 @@ class BaseSimulatorMonitor(ABC):
         
         Enregistre uniquement les points entre le décollage et l'atterrissage.
         """
-        # Tentative de connexion initiale
-        if not self.connect():
-            self._notify_connection_status(
-                False,
-                _("INITIAL_CONNECTION_FAILED")
-            )
-            self._running = False
-            return
-
-        self._notify_connection_status(True, _("CONNECTED_WAITING_TAKEOFF"))
+        # Tentative de connexion initiale (uniquement en mode automatique)
+        if self._auto_connect:
+            if not self._do_connect():
+                self._notify_connection_status(
+                    False,
+                    _("INITIAL_CONNECTION_FAILED")
+                )
+                self._running = False
+                return
+            self._notify_connection_status(True, _("CONNECTED_WAITING_TAKEOFF"))
+        else:
+            # Mode manuel : notifier qu'on attend une connexion manuelle
+            self._notify_connection_status(False, _("WAITING_MANUAL_CONNECTION"))
 
         # Boucle de polling
         while self._running:
             try:
+                # Si pas connecté, gérer selon le mode
+                if not self._connected:
+                    if self._auto_connect:
+                        # En mode automatique, réessayer la connexion
+                        if not self._do_connect():
+                            # Attendre avant de réessayer
+                            for _ in range(int(self.poll_interval * 10)):
+                                if not self._running:
+                                    break
+                                time.sleep(0.1)
+                            continue
+                        self._notify_connection_status(True, _("RECONNECTED"))
+                    else:
+                        # En mode manuel, skipper ce cycle
+                        for _ in range(int(self.poll_interval * 10)):
+                            if not self._running:
+                                break
+                            time.sleep(0.1)
+                        continue
+                
                 data = self.get_data()
                 if data:
                     # Vérifier si on doit enregistrer ce point (selon état de vol)
@@ -692,18 +756,19 @@ class MSFSMonitor(BaseSimulatorMonitor):
 
     MAX_ENGINES = 4
 
-    def __init__(self, geojson_path: str, poll_interval: float = 1.0, include_trajectory: bool = False):
+    def __init__(self, geojson_path: str, poll_interval: float = 1.0, include_trajectory: bool = False, auto_connect: bool = True):
         """
         Args:
             geojson_path: Chemin vers le fichier de sortie (.json ou .geojson)
             poll_interval: Intervalle de polling en secondes
             include_trajectory: Si True, ajoute une LineString pour QGIS
+            auto_connect: Si True (défaut), connexion automatique au démarrage
         """
-        super().__init__(geojson_path, poll_interval, include_trajectory)
+        super().__init__(geojson_path, poll_interval, include_trajectory, auto_connect)
         self._sm = None
         self._aq = None
 
-    def connect(self) -> bool:
+    def _do_connect(self) -> bool:
         """Établit la connexion SimConnect."""
         try:
             # Import dynamique pour éviter les erreurs sur les systèmes non-Windows
@@ -713,16 +778,8 @@ class MSFSMonitor(BaseSimulatorMonitor):
             self._aq = AircraftRequests(self._sm, _time=0)
             return True
         except ImportError:
-            self._notify_connection_status(
-                False,
-                _("SIMCONNECT_NOT_INSTALLED")
-            )
             return False
-        except Exception as e:
-            self._notify_connection_status(
-                False,
-                _("SIMCONNECT_CONNECTION_FAILED", error=str(e))
-            )
+        except Exception:
             return False
 
     def disconnect(self) -> None:
@@ -936,7 +993,8 @@ class XPlaneMonitor(BaseSimulatorMonitor):
         host: str = "127.0.0.1",
         port: int = 8086,
         poll_interval: float = 1.0,
-        include_trajectory: bool = False
+        include_trajectory: bool = False,
+        auto_connect: bool = True
     ):
         """
         Args:
@@ -945,14 +1003,15 @@ class XPlaneMonitor(BaseSimulatorMonitor):
             port: Port de l'API REST X-Plane (default: 8086)
             poll_interval: Intervalle de polling en secondes
             include_trajectory: Si True, ajoute une LineString pour QGIS
+            auto_connect: Si True (défaut), connexion automatique au démarrage
         """
-        super().__init__(geojson_path, poll_interval, include_trajectory)
+        super().__init__(geojson_path, poll_interval, include_trajectory, auto_connect)
         self.host = host
         self.port = port
         self._api = _XPlaneAPI(host, port)
         self._ids_resolved = False
 
-    def connect(self) -> bool:
+    def _do_connect(self) -> bool:
         """
         Résout les IDs des datarefs et teste la connexion.
         """
@@ -963,16 +1022,8 @@ class XPlaneMonitor(BaseSimulatorMonitor):
             self._api.get_float("latitude")
             return True
         except ImportError:
-            self._notify_connection_status(
-                False,
-                _("REQUESTS_NOT_INSTALLED")
-            )
             return False
-        except Exception as e:
-            self._notify_connection_status(
-                False,
-                _("XPLANE_CONNECTION_FAILED", error=str(e))
-            )
+        except Exception:
             return False
 
     def disconnect(self) -> None:
@@ -1047,7 +1098,8 @@ def create_monitor(
     poll_interval: float = 1.0,
     host: str = "127.0.0.1",
     port: int = 8086,
-    include_trajectory: bool = False
+    include_trajectory: bool = False,
+    auto_connect: bool = True
 ) -> BaseSimulatorMonitor:
     """
     Factory pour créer un moniteur de simulateur.
@@ -1064,6 +1116,10 @@ def create_monitor(
                           pour une meilleure visualisation dans QGIS.
                           Les points individuels sont toujours conservés pour 
                           les analyses (default: False).
+        auto_connect: Si True (défaut), la connexion au simulateur est 
+                     tentée automatiquement au démarrage du monitoring.
+                     Si False, l'utilisateur doit appeler monitor.connect() 
+                     manuellement (via le GUI futur).
     
     Returns:
         Instance de MSFSMonitor ou XPlaneMonitor
@@ -1088,11 +1144,22 @@ def create_monitor(
         ...     include_trajectory=True
         ... )
         >>> monitor.start_monitoring()
+        
+        >>> # Mode connexion manuelle (pour GUI)
+        >>> monitor = create_monitor(
+        ...     simulator_type="xplane",
+        ...     geojson_path="/tmp/track.json",
+        ...     auto_connect=False
+        ... )
+        >>> monitor.set_connection_callback(lambda c, m: print(m))
+        >>> monitor.start_monitoring()
+        >>> # L'utilisateur appelle connect() manuellement via le GUI
+        >>> monitor.connect()
     """
     if simulator_type == SimulatorType.MSFS.value:
-        return MSFSMonitor(geojson_path, poll_interval, include_trajectory)
+        return MSFSMonitor(geojson_path, poll_interval, include_trajectory, auto_connect)
     elif simulator_type == SimulatorType.XPLANE.value:
-        return XPlaneMonitor(geojson_path, host, port, poll_interval, include_trajectory)
+        return XPlaneMonitor(geojson_path, host, port, poll_interval, include_trajectory, auto_connect)
     else:
         raise ValueError(
             _("UNKNOWN_SIMULATOR_TYPE",
