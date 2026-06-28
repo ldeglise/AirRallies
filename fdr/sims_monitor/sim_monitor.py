@@ -56,6 +56,9 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Callable, Optional, Deque
 
+# Import des fonctions de traduction
+from .translations import gettext as _, set_language, get_language
+
 # ---------------------------------------------------------------------------
 # Types et constantes
 # ---------------------------------------------------------------------------
@@ -116,7 +119,7 @@ class GeoJSONWriter:
             ValueError: Si le chemin est vide ou invalide.
         """
         if not filepath:
-            raise ValueError("Le chemin du fichier ne peut pas être vide")
+            raise ValueError(_("Le chemin du fichier ne peut pas être vide"))
         
         # Normaliser le chemin et vérifier l'extension
         self.filepath = self._normalize_filepath(filepath)
@@ -256,27 +259,27 @@ class GeoJSONWriter:
     def _parse_latitude(self, value) -> float:
         """Parse et valide la latitude. RFC 7946 : doit être entre -90 et 90."""
         if value is None or value == "—":
-            raise ValueError("Latitude manquante")
+            raise ValueError(_("Latitude manquante"))
         try:
             clean = str(value).replace('°', '').strip()
             result = float(clean)
         except (ValueError, TypeError):
-            raise ValueError(f"Latitude invalide: {value}")
+            raise ValueError(_("Latitude invalide: {value}", value=value))
         if not (-90 <= result <= 90):
-            raise ValueError(f"Latitude hors plage: {result} (doit être entre -90 et 90)")
+            raise ValueError(_("Latitude hors plage: {result} (doit être entre -90 et 90)", result=result))
         return result
 
     def _parse_longitude(self, value) -> float:
         """Parse et valide la longitude. RFC 7946 : doit être entre -180 et 180."""
         if value is None or value == "—":
-            raise ValueError("Longitude manquante")
+            raise ValueError(_("Longitude manquante"))
         try:
             clean = str(value).replace('°', '').strip()
             result = float(clean)
         except (ValueError, TypeError):
-            raise ValueError(f"Longitude invalide: {value}")
+            raise ValueError(_("Longitude invalide: {value}", value=value))
         if not (-180 <= result <= 180):
-            raise ValueError(f"Longitude hors plage: {result} (doit être entre -180 et 180)")
+            raise ValueError(_("Longitude hors plage: {result} (doit être entre -180 et 180)", result=result))
         return result
 
     def _parse_altitude_m(self, value) -> Optional[float]:
@@ -504,7 +507,7 @@ class BaseSimulatorMonitor(ABC):
                 self._flight_state = FlightState.IN_FLIGHT
                 self._notify_connection_status(
                     True, 
-                    "Décollage détecté - Enregistrement démarré"
+                    _("Décollage détecté - Enregistrement démarré")
                 )
                 return True  # Enregistrer ce point
             return False
@@ -515,7 +518,7 @@ class BaseSimulatorMonitor(ABC):
                 self._flight_state = FlightState.LANDED
                 self._notify_connection_status(
                     True,
-                    "Atterrissage détecté - Enregistrement arrêté"
+                    _("Atterrissage détecté - Enregistrement arrêté")
                 )
                 return False  # Ne pas enregistrer
             return True  # Enregistrer
@@ -622,7 +625,7 @@ class BaseSimulatorMonitor(ABC):
         self.disconnect()
         self._flight_state = FlightState.WAITING
         self._data_history.clear()
-        self._notify_connection_status(False, "Monitoring arrêté")
+        self._notify_connection_status(False, _("Monitoring arrêté"))
 
     def _monitor_loop(self) -> None:
         """
@@ -635,12 +638,12 @@ class BaseSimulatorMonitor(ABC):
         if not self.connect():
             self._notify_connection_status(
                 False,
-                "Échec de la connexion initiale au simulateur"
+                _("Échec de la connexion initiale au simulateur")
             )
             self._running = False
             return
 
-        self._notify_connection_status(True, "Connecté au simulateur - En attente de décollage")
+        self._notify_connection_status(True, _("Connecté au simulateur - En attente de décollage"))
 
         # Boucle de polling
         while self._running:
@@ -668,12 +671,12 @@ class BaseSimulatorMonitor(ABC):
             except Exception as e:
                 self._notify_connection_status(
                     False,
-                    f"Erreur lors de la récupération des données: {str(e)}"
+                    _("Erreur lors de la récupération des données: {error}", error=str(e))
                 )
                 self._running = False
                 break
 
-        self._notify_connection_status(False, "Déconnecté")
+        self._notify_connection_status(False, _("Déconnecté"))
 
 # ---------------------------------------------------------------------------
 # Moniteur MSFS (SimConnect)
@@ -712,13 +715,13 @@ class MSFSMonitor(BaseSimulatorMonitor):
         except ImportError:
             self._notify_connection_status(
                 False,
-                "Module SimConnect non installé (Windows uniquement)"
+                _("Module SimConnect non installé (Windows uniquement)")
             )
             return False
         except Exception as e:
             self._notify_connection_status(
                 False,
-                f"Échec de connexion SimConnect: {str(e)}"
+                _("Échec de connexion SimConnect: {error}", error=str(e))
             )
             return False
 
@@ -962,13 +965,13 @@ class XPlaneMonitor(BaseSimulatorMonitor):
         except ImportError:
             self._notify_connection_status(
                 False,
-                "Module 'requests' non installé"
+                _("Module 'requests' non installé")
             )
             return False
         except Exception as e:
             self._notify_connection_status(
                 False,
-                f"Échec de connexion X-Plane: {str(e)}"
+                _("Échec de connexion X-Plane: {error}", error=str(e))
             )
             return False
 
