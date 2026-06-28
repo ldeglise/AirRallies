@@ -91,6 +91,13 @@ _EN_TRANSLATIONS: Dict[str, str] = {
     # Messages from XPlaneMonitor
     "Module 'requests' non installé": "'requests' module not installed",
     "Échec de connexion X-Plane: {error}": "X-Plane connection failed: {error}",
+    
+    # Messages from _XPlaneAPI
+    "Dataref introuvable: {path}": "Dataref not found: {path}",
+    
+    # Messages from create_monitor
+    "Type de simulateur inconnu: '{simulator_type}'. Utilisez '{msfs}' ou '{xplane}'": 
+        "Unknown simulator type: '{simulator_type}'. Use '{msfs}' or '{xplane}'",
 }
 
 # Dictionnaire des traductions disponibles

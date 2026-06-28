@@ -856,7 +856,7 @@ class _XPlaneAPI:
             resp.raise_for_status()
             records = resp.json()["data"]
             if not records:
-                raise ValueError(f"Dataref introuvable: {path}")
+                raise ValueError(_("Dataref introuvable: {path}", path=path))
             self._cache[key] = records[0]["id"]
             self._types[key] = records[0]["value_type"]
 
@@ -1095,8 +1095,8 @@ def create_monitor(
         return XPlaneMonitor(geojson_path, host, port, poll_interval, include_trajectory)
     else:
         raise ValueError(
-            f"Type de simulateur inconnu: '{simulator_type}'. "
-            f"Utilisez '{SimulatorType.MSFS.value}' ou '{SimulatorType.XPLANE.value}'"
+            _("Type de simulateur inconnu: '{simulator_type}'. Utilisez '{msfs}' ou '{xplane}'",
+              simulator_type=simulator_type, msfs=SimulatorType.MSFS.value, xplane=SimulatorType.XPLANE.value)
         )
 
 # ---------------------------------------------------------------------------
