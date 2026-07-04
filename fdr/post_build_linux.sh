@@ -1,189 +1,75 @@
-name: Build and Release FDR
+#!/bin/bash
+# Post-build script for Linux to separate PySide6 for GPL compliance
+# Adapted for GitHub Actions
 
-on:
-  push:
-    tags:
-      - 'v*'
-  pull_request:
-    paths:
-      - 'fdr/**'
+set -e  # Arrête le script en cas d'erreur
 
-env:
-  APP_NAME: fdr
-  VERSION: ${{ github.ref_name }}
+DIST_DIR="dist-linux/fdr"
+PYSIDE_DIR="$DIST_DIR/pyside6"
 
-jobs:
-  build-linux:
-    name: Build FDR for Linux
-    runs-on: ubuntu-latest
+# Create pyside6 directory structure
+mkdir -p "$PYSIDE_DIR/lib"
+mkdir -p "$PYSIDE_DIR/Qt/lib"
+mkdir -p "$PYSIDE_DIR/plugins"
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+echo "Separating PySide6 libraries..."
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
+# Move Qt6 and shiboken6 libraries to pyside6/lib
+if [ -d "$DIST_DIR/_internal" ]; then
+    find "$DIST_DIR/_internal" -type f \( -name "*Qt6*.so*" -o -name "*shiboken*.so*" \) | while read -r file; do
+        echo "  Moving $(basename "$file") to pyside6/lib..."
+        mv "$file" "$PYSIDE_DIR/lib/" || echo "  Warning: Failed to move $file"
+    done
+fi
 
-      - name: Install system dependencies (Linux)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libxcb-util1 libxcb-render-util0 libxcb-shape0 libxcb-icccm4 libxcb-cursor0 libxcb-keysyms1 libxcb-xkb1 libxcb-image0 libxkbcommon-x11-0 libtiff5
+# Copy Qt libraries
+if [ -d "$DIST_DIR/_internal/PySide6/Qt/lib" ]; then
+    echo "Copying Qt libraries to pyside6/Qt/lib..."
+    cp -r "$DIST_DIR/_internal/PySide6/Qt/lib/." "$PYSIDE_DIR/Qt/lib/" || echo "  Warning: Failed to copy Qt libraries"
+fi
 
-      - name: Install Python dependencies
-        working-directory: fdr
-        run: |
-          python -m pip install --upgrade pip
-          pip install PySide6 pyinstaller
+# Copy Qt plugins
+if [ -d "$DIST_DIR/_internal/PySide6/Qt/plugins" ]; then
+    echo "Copying Qt plugins to pyside6/plugins..."
+    cp -r "$DIST_DIR/_internal/PySide6/Qt/plugins/." "$PYSIDE_DIR/plugins/" || echo "  Warning: Failed to copy Qt plugins"
+fi
 
-      - name: Build with PyInstaller
-        working-directory: fdr
-        run: |
-          rm -rf ./dist-linux
-          pyinstaller --onedir --name fdr --clean --distpath ./dist-linux --workpath ./build-linux fdr.py
+# Copy PySide6 and shiboken6 directories
+if [ -d "$DIST_DIR/_internal/PySide6" ]; then
+    echo "Copying PySide6 to pyside6..."
+    cp -r "$DIST_DIR/_internal/PySide6" "$PYSIDE_DIR/" || echo "  Warning: Failed to copy PySide6"
+fi
 
-      - name: Run post-build script (Linux)
-        working-directory: fdr
-        run: |
-          chmod +x post_build_linux.sh
-          ./post_build_linux.sh
+if [ -d "$DIST_DIR/_internal/shiboken6" ]; then
+    echo "Copying shiboken6 to pyside6..."
+    cp -r "$DIST_DIR/_internal/shiboken6" "$PYSIDE_DIR/" || echo "  Warning: Failed to copy shiboken6"
+fi
 
-      - name: Create versioned archive
-        working-directory: fdr
-        run: |
-          VERSION_NO_V=${VERSION#v}
-          ARCHIVE_NAME=${APP_NAME}-linux-${VERSION_NO_V}
-          mkdir -p ../release
-          tar -czf ../release/${ARCHIVE_NAME}.tar.gz -C dist-linux .
+# Backup original executable
+if [ -f "$DIST_DIR/fdr" ]; then
+    echo "Backing up original executable..."
+    mv "$DIST_DIR/fdr" "$DIST_DIR/fdr_bin" || echo "  Warning: Failed to backup executable"
+fi
 
-      - name: Upload Linux artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: fdr-linux-${{ env.VERSION }}
-          path: release/
-          retention-days: 7
+# Create launcher script
+cat > "$DIST_DIR/fdr.sh" << 'EOF'
+#!/bin/bash
+SCRIPT_DIR=$(dirname "$0")
+PYSIDE_DIR="$SCRIPT_DIR/pyside6"
 
-  build-windows:
-    name: Build FDR for Windows
-    runs-on: windows-latest
+# Add PySide6 libraries to LD_LIBRARY_PATH
+export LD_LIBRARY_PATH="$PYSIDE_DIR/lib:$PYSIDE_DIR/Qt/lib:$LD_LIBRARY_PATH"
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+# Add PySide6 to Qt plugin path
+export QT_PLUGIN_PATH="$PYSIDE_DIR/plugins:$QT_PLUGIN_PATH"
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
+# Execute the actual binary
+exec "$SCRIPT_DIR/fdr_bin" "$@"
+EOF
 
-      - name: Install Python dependencies
-        working-directory: fdr
-        run: |
-          python -m pip install --upgrade pip
-          pip install PySide6 pyinstaller
+# Make the launcher script executable
+chmod +x "$DIST_DIR/fdr.sh"
 
-      - name: Build with PyInstaller
-        working-directory: fdr
-        run: |
-          rm -rf ./dist-windows
-          pyinstaller --onedir --name fdr --clean --distpath ./dist-windows --workpath ./build-windows --windowed fdr.py
-
-      - name: Run post-build script (Windows)
-        working-directory: fdr
-        run: cmd /c post_build_windows.bat
-
-      - name: Create versioned archive
-        working-directory: fdr
-        run: |
-          $versionNoV = $env:VERSION.TrimStart('v')
-          $archiveName = "$env:APP_NAME-windows-$versionNoV"
-          New-Item -ItemType Directory -Force -Path "..\release"
-          Compress-Archive -Path "dist-windows\*" -DestinationPath "..\release\$archiveName.zip"
-
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: fdr-windows-${{ env.VERSION }}
-          path: release/
-          retention-days: 7
-
-  build-macos:
-    name: Build FDR for macOS
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install Python dependencies
-        working-directory: fdr
-        run: |
-          python -m pip install --upgrade pip
-          pip install PySide6 pyinstaller
-
-      - name: Build with PyInstaller
-        working-directory: fdr
-        run: |
-          rm -rf ./dist-macos
-          pyinstaller --onedir --name fdr --clean --distpath ./dist-macos --workpath ./build-macos --windowed fdr.py
-
-      - name: Create versioned archive
-        working-directory: fdr
-        run: |
-          VERSION_NO_V=${VERSION#v}
-          ARCHIVE_NAME=${APP_NAME}-macos-${VERSION_NO_V}
-          mkdir -p ../release
-          tar -czf ../release/${ARCHIVE_NAME}.tar.gz -C dist-macos .
-
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: fdr-macos-${{ env.VERSION }}
-          path: release/
-          retention-days: 7
-
-  publish-release:
-    name: Publish GitHub Release
-    needs: [build-linux, build-windows, build-macos]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: false
-
-      - name: List downloaded artifacts
-        run: |
-          ls -R artifacts/
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: FDR ${{ github.ref_name }}
-          body: |
-            ## Flight Data Recorder ${{ github.ref_name }}
-
-            **Assets:**
-            - Linux: `.tar.gz`
-            - Windows: `.zip`
-            - macOS: `.tar.gz`
-
-            All archives contain PySide6 libraries separated for GPL compliance.
-          draft: false
-          prerelease: false
-          files: |
-            artifacts/fdr-linux-*/*.tar.gz
-            artifacts/fdr-windows-*/*.zip
-            artifacts/fdr-macos-*/*.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+echo ""
+echo "Post-build processing complete!"
+echo "================================"
