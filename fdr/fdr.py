@@ -487,9 +487,9 @@ class MainWindow(QMainWindow):
             self.poller.monitoring_state_changed.connect(self.on_poller_monitoring_state_changed)
             self.poller.log_message.connect(self.log_message)
             
-            # Start polling at a reasonable interval
+            # Start polling at a reasonable interval (minimum 1 second)
             poll_interval_ms = int(self._get_poll_interval() * 1000)
-            self.poller.start(max(poll_interval_ms, 500))  # Minimum 500ms for UI updates
+            self.poller.start(max(poll_interval_ms, 1000))  # Minimum 1000ms (1 second)
     
     def on_data_updated(self, data):
         """Handle new data from the simulator."""

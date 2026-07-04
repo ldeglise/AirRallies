@@ -92,10 +92,10 @@ class Ui_MainWindow(object):
         self.spinBoxPollInterval = QDoubleSpinBox(self.groupBoxSimulator)
         self.spinBoxPollInterval.setObjectName(u"spinBoxPollInterval")
         self.spinBoxPollInterval.setDecimals(1)
-        self.spinBoxPollInterval.setMinimum(0)
-        self.spinBoxPollInterval.setMaximum(0)
-        self.spinBoxPollInterval.setSingleStep(0)
-        self.spinBoxPollInterval.setValue(0)
+        self.spinBoxPollInterval.setMinimum(1.0)
+        self.spinBoxPollInterval.setMaximum(10.0)
+        self.spinBoxPollInterval.setSingleStep(0.5)
+        self.spinBoxPollInterval.setValue(1.0)
 
         self.formLayoutSimulator.setWidget(3, QFormLayout.FieldRole, self.spinBoxPollInterval)
 
