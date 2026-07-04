@@ -381,17 +381,18 @@ class MainWindow(QMainWindow):
         if self.monitor:
             self.ui.pushButtonConnect.setEnabled(not self.monitor.is_connected)
             self.ui.pushButtonDisconnect.setEnabled(self.monitor.is_connected)
+            # Start Monitoring button enabled only if connected and not already running
             self.ui.pushButtonStart.setEnabled(
                 not self.monitor._running and 
+                self.monitor.is_connected and
                 bool(self.ui.lineEditOutputFile.text().strip())
             )
             self.ui.pushButtonStop.setEnabled(self.monitor._running)
         else:
             self.ui.pushButtonConnect.setEnabled(True)
             self.ui.pushButtonDisconnect.setEnabled(False)
-            self.ui.pushButtonStart.setEnabled(
-                bool(self.ui.lineEditOutputFile.text().strip())
-            )
+            # No monitor = cannot start monitoring (need connection first)
+            self.ui.pushButtonStart.setEnabled(False)
             self.ui.pushButtonStop.setEnabled(False)
     
     def _get_selected_simulator_type(self):
