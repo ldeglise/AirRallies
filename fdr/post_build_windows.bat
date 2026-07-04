@@ -1,7 +1,6 @@
 @echo off
 REM Post-build script for Windows to separate PySide6 for GPL compliance
-REM This script reorganizes the PyInstaller output to separate PySide6 libraries
-REM Strategy: Keep Python packages in _internal but move DLLs to pyside6/lib
+REM Adapted for GitHub Actions (no mklink, no pause)
 
 setlocal enabledelayedexpansion
 
@@ -40,23 +39,15 @@ if exist "%DIST_DIR%\_internal\PySide6\Qt\plugins\" (
     xcopy "%DIST_DIR%\_internal\PySide6\Qt\plugins\*" "%PYSIDE_DIR%\plugins\" /E /Y /Q >nul
 )
 
-REM Create junctions (symlinks) for PySide6 and shiboken6 in pyside6 for clarity
+REM Copy PySide6 and shiboken6 directories (instead of mklink)
 if exist "%DIST_DIR%\_internal\PySide6" (
-    echo   Creating junction to PySide6 in pyside6...
-    mklink /J "%PYSIDE_DIR%\PySide6" "%DIST_DIR%\_internal\PySide6" >nul 2>&1
-    if errorlevel 1 (
-        echo   (Junction failed, copying instead...)
-        xcopy "%DIST_DIR%\_internal\PySide6" "%PYSIDE_DIR%\PySide6\" /E /Y /Q >nul
-    )
+    echo   Copying PySide6 to pyside6...
+    xcopy "%DIST_DIR%\_internal\PySide6" "%PYSIDE_DIR%\PySide6\" /E /Y /Q >nul
 )
 
 if exist "%DIST_DIR%\_internal\shiboken6" (
-    echo   Creating junction to shiboken6 in pyside6...
-    mklink /J "%PYSIDE_DIR%\shiboken6" "%DIST_DIR%\_internal\shiboken6" >nul 2>&1
-    if errorlevel 1 (
-        echo   (Junction failed, copying instead...)
-        xcopy "%DIST_DIR%\_internal\shiboken6" "%PYSIDE_DIR%\shiboken6\" /E /Y /Q >nul
-    )
+    echo   Copying shiboken6 to pyside6...
+    xcopy "%DIST_DIR%\_internal\shiboken6" "%PYSIDE_DIR%\shiboken6\" /E /Y /Q >nul
 )
 
 REM Backup original executable
@@ -87,13 +78,3 @@ REM Create launcher batch file
 echo.
 echo Post-build processing complete!
 echo ================================
-echo Structure:
-echo   %DIST_DIR%\
-echo     +--- fdr.bat       (launcher script)
-echo     +--- fdr_bin.exe   (actual executable)
-echo     +--- _internal\   (other dependencies)
-echo     \--- pyside6\     (PySide6 libraries - GPL compliant)
-echo.
-echo To run: %DIST_DIR%\fdr.bat
-echo.
-pause
