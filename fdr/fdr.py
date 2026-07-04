@@ -241,8 +241,8 @@ class MainWindow(QMainWindow):
             self.menuLanguage.setTitle(_("LANGUAGE_MENU"))
             self.actionEnglish.setText(_("LANGUAGE_ENGLISH"))
             self.actionFrench.setText(_("LANGUAGE_FRENCH"))
-            # Update checked state
-            current_lang = get_gui_language() or lang or "en"
+            # Update checked state - utiliser lang passé en paramètre (évite appel à get_gui_language())
+            current_lang = lang or get_gui_language() or "en"
             if current_lang == "fr":
                 self.actionFrench.setChecked(True)
                 self.actionEnglish.setChecked(False)

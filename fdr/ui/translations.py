@@ -339,13 +339,18 @@ class TranslationManager:
             old_lang = self._current_language
             self._current_language = lang
             
-            # Si la langue a changé, notifier les callbacks
-            if old_lang != lang:
-                for callback in self._retranslate_callbacks:
-                    try:
-                        callback(lang)
-                    except Exception:
-                        pass  # Ne pas propager les erreurs des callbacks
+            # Copier les callbacks à appeler (pour éviter deadlock)
+            callbacks_to_call = self._retranslate_callbacks.copy()
+            lang_to_pass = lang
+        
+        # Appeler les callbacks EN DEHORS du lock pour éviter deadlock
+        # (les callbacks peuvent appeler get_language() qui prend le lock)
+        if old_lang != lang:
+            for callback in callbacks_to_call:
+                try:
+                    callback(lang_to_pass)
+                except Exception:
+                    pass  # Ne pas propager les erreurs des callbacks
     
     def get_current_language(self) -> Optional[str]:
         """Retourne la langue actuelle."""
@@ -371,7 +376,8 @@ class TranslationManager:
         with self._lock:
             lang = self._current_language
             if lang is None:
-                # Détecter la langue système sans acquérir le lock à nouveau
+                # Détecter la langue système - faire ça en dehors du lock serait mieux
+                # mais on est déjà dans le lock, donc on continue
                 lang = self._detect_system_language()
                 if lang not in _AVAILABLE_TRANSLATIONS and lang not in self._custom_translations:
                     lang = "en"
@@ -383,15 +389,15 @@ class TranslationManager:
             
             # Récupérer le message
             message_template = translations.get(message_id, message_id)
-            
-            # Formater avec les kwargs si nécessaire
-            if kwargs:
-                try:
-                    return message_template.format(**kwargs)
-                except (KeyError, ValueError):
-                    return message_template
-            
-            return message_template
+        
+        # Formater avec les kwargs si nécessaire (en dehors du lock pour éviter blocage)
+        if kwargs:
+            try:
+                return message_template.format(**kwargs)
+            except (KeyError, ValueError):
+                return message_template
+        
+        return message_template
     
     def on_language_change(self, callback: Callable[[str], None]) -> None:
         """
