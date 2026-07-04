@@ -33,6 +33,16 @@ from PySide6.QtGui import QColor, QPalette
 # Import the generated UI
 from ui.gui_fdr import Ui_MainWindow
 
+# Import the GUI translations
+from ui.translations import (
+    gettext as gui_trans,
+    set_language as set_gui_language,
+    get_language as get_gui_language,
+    on_language_change,
+    set_language_both,
+    TranslationManager
+)
+
 # Import the simulator monitor
 from sims_monitor.sim_monitor import (
     create_monitor,
@@ -40,6 +50,9 @@ from sims_monitor.sim_monitor import (
     FlightState,
     check_simulator_available
 )
+
+# Convenience alias for GUI translations
+_ = gui_trans
 
 
 # ---------------------------------------------------------------------------
@@ -91,25 +104,30 @@ class DataPoller(QObject):
             
             # Check connection status
             is_connected = self.monitor.is_connected
-            if is_connected:
-                status = "Connected"
-            else:
-                status = "Disconnected"
+            # Use translated strings for status
+            from ui.translations import gettext as gui_trans_poller
+            status = gui_trans_poller("CONNECTION_CONNECTED") if is_connected else gui_trans_poller("CONNECTION_DISCONNECTED")
             self.connection_changed.emit(is_connected, status)
             
             # Check flight state
             state = self.monitor.flight_state
-            state_str = state.value.replace("_", " ").title()
+            # Translate flight state
+            state_mapping = {
+                FlightState.WAITING: gui_trans_poller("FLIGHT_STATE_WAITING"),
+                FlightState.IN_FLIGHT: gui_trans_poller("FLIGHT_STATE_IN_FLIGHT"),
+                FlightState.LANDED: gui_trans_poller("FLIGHT_STATE_LANDED"),
+            }
+            state_str = state_mapping.get(state, state.value.replace("_", " ").title())
             self.flight_state_changed.emit(state_str)
             
             # Check monitoring state
             if self.monitor._running:
-                self.monitoring_state_changed.emit("Running")
+                self.monitoring_state_changed.emit(gui_trans_poller("MONITORING_RUNNING"))
             else:
-                self.monitoring_state_changed.emit("Stopped")
+                self.monitoring_state_changed.emit(gui_trans_poller("MONITORING_STOPPED"))
                 
         except Exception as e:
-            self.log_message.emit(f"Error polling data: {e}")
+            self.log_message.emit(gui_trans_poller("ERROR_POLLING_DATA", error=str(e)))
 
 
 # ---------------------------------------------------------------------------
@@ -124,12 +142,19 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         
+        # Initialize language detection and translations
+        # This must be done BEFORE creating the UI
+        self._init_translations()
+        
         # Initialize UI
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         
         # Setup additional UI properties
         self._setup_ui_extras()
+        
+        # Apply translations to UI
+        self._retranslate_ui()
         
         # Initialize monitor
         self.monitor = None
@@ -144,18 +169,29 @@ class MainWindow(QMainWindow):
         self._update_ui_state()
         
         # Log startup message
-        self.log_message("Application started. Ready for monitoring.")
+        self.log_message(_("LOG_STARTUP"))
         
         # Set default output file path
         default_path = os.path.expanduser(f"~/flight_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
         self.ui.lineEditOutputFile.setText(default_path)
     
+    def _init_translations(self):
+        """Initialize language detection and setup language menu."""
+        # Detect system language and set it (will fall back to English if not available)
+        set_gui_language(None)  # None = auto-detect
+        
+        # Synchronize with sim_monitor translations
+        set_language_both(get_gui_language())
+        
+        # Register callback for language changes
+        on_language_change(self._retranslate_ui)
+    
     def _setup_ui_extras(self):
         """Setup additional UI properties that can't be set in Qt Designer."""
         # Set combo box items properly
         self.ui.comboSimulatorType.clear()
-        self.ui.comboSimulatorType.addItem("X-Plane 12", SimulatorType.XPLANE.value)
-        self.ui.comboSimulatorType.addItem("MSFS 2020/2024 / P3D", SimulatorType.MSFS.value)
+        self.ui.comboSimulatorType.addItem(_("SIMULATOR_XPLANE_12"), SimulatorType.XPLANE.value)
+        self.ui.comboSimulatorType.addItem(_("SIMULATOR_MSFS_P3D"), SimulatorType.MSFS.value)
         
         # Set default simulator type
         self.ui.comboSimulatorType.setCurrentIndex(0)
@@ -164,7 +200,130 @@ class MainWindow(QMainWindow):
         self.ui.textBrowserLog.setOpenExternalLinks(True)
         
         # Set initial status message using native status bar
-        self.statusBar().showMessage("Ready")
+        self.statusBar().showMessage(_("READY"))
+        
+        # Setup language menu
+        self._setup_language_menu()
+    
+    def _setup_language_menu(self):
+        """Setup the Language menu in the menu bar."""
+        # Create Language menu
+        self.menuLanguage = self.ui.menubar.addMenu(_("LANGUAGE_MENU"))
+        
+        # Add language actions
+        self.actionEnglish = self.menuLanguage.addAction(_("LANGUAGE_ENGLISH"))
+        self.actionFrench = self.menuLanguage.addAction(_("LANGUAGE_FRENCH"))
+        
+        # Connect language actions
+        self.actionEnglish.triggered.connect(lambda: set_language_both("en"))
+        self.actionFrench.triggered.connect(lambda: set_language_both("fr"))
+        
+        # Mark current language
+        current_lang = get_gui_language()
+        if current_lang == "fr":
+            self.actionFrench.setChecked(True)
+        else:
+            self.actionEnglish.setChecked(True)
+    
+    def _retranslate_ui(self, lang: str = None):
+        """Retranslate the entire UI based on current language."""
+        # Update window title
+        self.setWindowTitle(_("FLIGHT_DATA_RECORDER_TITLE"))
+        
+        # Update menu bar
+        self.ui.menuFile.setTitle(_("FILE_MENU"))
+        self.ui.menuHelp.setTitle(_("HELP_MENU"))
+        self.ui.actionExit.setText(_("EXIT_ACTION"))
+        self.ui.actionAbout.setText(_("ABOUT_ACTION"))
+        
+        # Update language menu if it exists
+        if hasattr(self, 'menuLanguage'):
+            self.menuLanguage.setTitle(_("LANGUAGE_MENU"))
+            self.actionEnglish.setText(_("LANGUAGE_ENGLISH"))
+            self.actionFrench.setText(_("LANGUAGE_FRENCH"))
+            # Update checked state
+            current_lang = get_gui_language() or lang or "en"
+            if current_lang == "fr":
+                self.actionFrench.setChecked(True)
+                self.actionEnglish.setChecked(False)
+            else:
+                self.actionEnglish.setChecked(True)
+                self.actionFrench.setChecked(False)
+        
+        # Update tab widget
+        self.ui.tabWidget.setTabText(0, _("MAIN_TAB"))  # Need to add MAIN_TAB to translations
+        self.ui.tabWidget.setTabText(1, _("ADVANCED_TAB"))
+        
+        # Update Simulator Settings group
+        self.ui.groupBoxSimulator.setTitle(_("SIMULATOR_SETTINGS"))
+        self.ui.labelSimulatorType.setText(_("SIMULATOR_TYPE"))
+        self.ui.labelHost.setText(_("HOST"))
+        self.ui.lineEditHost.setPlaceholderText(_("HOST_PLACEHOLDER"))
+        self.ui.labelPort.setText(_("PORT"))
+        self.ui.labelPollInterval.setText(_("POLL_INTERVAL"))
+        
+        # Update Output Settings group
+        self.ui.groupBoxOutput.setTitle(_("OUTPUT_SETTINGS"))
+        self.ui.labelOutputFile.setText(_("OUTPUT_FILE"))
+        self.ui.lineEditOutputFile.setPlaceholderText(_("OUTPUT_FILE_PLACEHOLDER"))
+        self.ui.pushButtonBrowse.setText(_("BROWSE_BUTTON"))
+        self.ui.checkBoxIncludeTrajectory.setText(_("INCLUDE_TRAJECTORY"))
+        self.ui.checkBoxIncludeTrajectory.setToolTip(_("INCLUDE_TRAJECTORY_TOOLTIP"))
+        self.ui.checkBoxAutoConnect.setText(_("AUTO_CONNECT"))
+        self.ui.checkBoxAutoConnect.setToolTip(_("AUTO_CONNECT_TOOLTIP"))
+        
+        # Update Controls group
+        self.ui.groupBoxControls.setTitle(_("CONTROLS"))
+        self.ui.pushButtonConnect.setText(_("CONNECT_BUTTON"))
+        self.ui.pushButtonDisconnect.setText(_("DISCONNECT_BUTTON"))
+        self.ui.pushButtonStart.setText(_("START_MONITORING"))
+        self.ui.pushButtonStop.setText(_("STOP_MONITORING"))
+        
+        # Update Status group
+        self.ui.groupBoxStatus.setTitle(_("STATUS"))
+        self.ui.labelConnectionStatusTitle.setText(_("CONNECTION"))
+        self.ui.labelFlightStatusTitle.setText(_("FLIGHT_STATE"))
+        self.ui.labelMonitoringStatusTitle.setText(_("MONITORING"))
+        
+        # Update Advanced tab
+        self.ui.groupBoxAircraft.setTitle(_("AIRCRAFT_INFORMATION"))
+        self.ui.labelAircraftICAO.setText(_("ICAO_CODE"))
+        self.ui.labelAircraftName.setText(_("AIRCRAFT_NAME"))
+        
+        self.ui.groupBoxData.setTitle(_("LIVE_DATA"))
+        self.ui.labelLatitude.setText(_("LATITUDE"))
+        self.ui.labelLongitude.setText(_("LONGITUDE"))
+        self.ui.labelAltitude.setText(_("ALTITUDE_MSL"))
+        self.ui.labelAGL.setText(_("ALTITUDE_AGL"))
+        self.ui.labelHeading.setText(_("HEADING"))
+        self.ui.labelGroundSpeed.setText(_("GROUND_SPEED"))
+        self.ui.labelIndicatedSpeed.setText(_("INDICATED_SPEED"))
+        self.ui.labelPower.setText(_("POWER"))
+        self.ui.labelSimTime.setText(_("SIMULATION_TIME"))
+        
+        # Update static text values
+        self._update_static_text()
+        
+        # Update status bar
+        self.statusBar().showMessage(_("LOG_STARTUP"))
+    
+    def _update_static_text(self):
+        """Update static text elements that need translation."""
+        # Update N/A values in data display
+        na_text = _("N_A")
+        for widget_name in ['labelAircraftICAOValue', 'labelAircraftNameValue',
+                            'labelLatitudeValue', 'labelLongitudeValue',
+                            'labelAltitudeValue', 'labelAGLValue',
+                            'labelHeadingValue', 'labelGroundSpeedValue',
+                            'labelIndicatedSpeedValue', 'labelPowerValue',
+                            'labelSimTimeValue']:
+            widget = getattr(self.ui, widget_name, None)
+            if widget and widget.text() == "N/A":
+                widget.setText(na_text)
+        
+        # Update initial log message
+        self.ui.textBrowserLog.clear()
+        self.log_message(_("LOG_STARTUP"))
     
     def _connect_signals(self):
         """Connect all UI signals to their slots."""
@@ -282,9 +441,9 @@ class MainWindow(QMainWindow):
         options = QFileDialog.Option.DontUseNativeDialog
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Select Output File",
+            _("SELECT_OUTPUT_FILE"),
             self._get_output_file() or os.path.expanduser("~"),
-            "GeoJSON Files (*.json *.geojson);;All Files (*)"
+            _("FILE_FILTER_GEOJSON")
         )
         
         if file_path:
@@ -310,8 +469,8 @@ class MainWindow(QMainWindow):
         auto_connect = self._get_auto_connect()
         
         if not output_file:
-            self.log_message("Error: No output file specified")
-            QMessageBox.warning(self, "Error", "Please specify an output file path.")
+            self.log_message(_("ERROR_NO_OUTPUT_FILE"))
+            QMessageBox.warning(self, _("ERROR_NO_OUTPUT_FILE"), _("ERROR_SPECIFY_OUTPUT_FILE"))
             return None
         
         try:
@@ -329,13 +488,13 @@ class MainWindow(QMainWindow):
             monitor.set_connection_callback(self.on_connection_status_changed)
             
             self.monitor = monitor
-            self.log_message(f"Monitor created for {sim_type} simulator")
+            self.log_message(_("MONITOR_CREATED", sim_type=sim_type))
             
             return monitor
             
         except Exception as e:
-            self.log_message(f"Error creating monitor: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to create monitor: {e}")
+            self.log_message(_("ERROR_CREATING_MONITOR", error=str(e)))
+            QMessageBox.critical(self, _("ERROR_NO_OUTPUT_FILE"), _("FAILED_CREATE_MONITOR", error=str(e)))
             return None
     
     def cleanup_monitor(self):
@@ -361,7 +520,7 @@ class MainWindow(QMainWindow):
     def on_connection_status_changed(self, connected, message):
         """Callback for monitor connection status changes."""
         # Update connection status label
-        self.ui.labelConnectionStatus.setText("Connected" if connected else "Disconnected")
+        self.ui.labelConnectionStatus.setText(_("CONNECTION_CONNECTED") if connected else _("CONNECTION_DISCONNECTED"))
         
         # Set color
         palette = self.ui.labelConnectionStatus.palette()
@@ -389,25 +548,25 @@ class MainWindow(QMainWindow):
         try:
             success = self.monitor.connect()
             if success:
-                self.log_message("Successfully connected to simulator")
+                self.log_message(_("CONNECTED_SUCCESS"))
                 self._update_ui_state()
                 
                 # Start polling live data
                 self.start_polling()
             else:
-                self.log_message("Failed to connect to simulator")
+                self.log_message(_("CONNECT_FAILED"))
         except Exception as e:
-            self.log_message(f"Connection error: {e}")
-            QMessageBox.critical(self, "Connection Error", str(e))
+            self.log_message(_("CONNECTION_ERROR", error=str(e)))
+            QMessageBox.critical(self, _("CONNECTION_ERROR", error=""), str(e))
     
     def on_disconnect(self):
         """Handle Disconnect button click."""
         if self.monitor:
             try:
                 self.monitor.disconnect()
-                self.log_message("Disconnected from simulator")
+                self.log_message(_("DISCONNECTED_SUCCESS"))
             except Exception as e:
-                self.log_message(f"Error disconnecting: {e}")
+                self.log_message(_("DISCONNECT_ERROR", error=str(e)))
         
         # Stop polling
         if self.poller:
@@ -427,13 +586,13 @@ class MainWindow(QMainWindow):
         # Get fresh settings
         output_file = self._get_output_file()
         if not output_file:
-            QMessageBox.warning(self, "Error", "Please specify an output file.")
+            QMessageBox.warning(self, _("ERROR_NO_OUTPUT_FILE"), _("ERROR_SPECIFY_OUTPUT_FILE"))
             return
         
         # Check if we need to recreate monitor with new settings
         if (self.monitor.geojson_writer.filepath != output_file or
             self._get_include_trajectory() != self.monitor.geojson_writer._include_trajectory):
-            self.log_message("Output settings changed, recreating monitor...")
+            self.log_message(_("OUTPUT_CHANGED"))
             self.create_monitor_instance()
         
         if not self.monitor:
@@ -446,7 +605,7 @@ class MainWindow(QMainWindow):
             
             # Start monitoring
             self.monitor.start_monitoring()
-            self.log_message("Monitoring started")
+            self.log_message(_("MONITORING_STARTED"))
             
             # Start polling
             self.start_polling()
@@ -454,17 +613,17 @@ class MainWindow(QMainWindow):
             self._update_ui_state()
             
         except Exception as e:
-            self.log_message(f"Error starting monitoring: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to start monitoring: {e}")
+            self.log_message(_("ERROR_STARTING_MONITORING", error=str(e)))
+            QMessageBox.critical(self, _("ERROR_NO_OUTPUT_FILE"), _("FAILED_START_MONITORING", error=str(e)))
     
     def on_stop_monitoring(self):
         """Handle Stop Monitoring button click."""
         if self.monitor and self.monitor._running:
             try:
                 self.monitor.stop_monitoring()
-                self.log_message("Monitoring stopped")
+                self.log_message(_("MONITORING_STOPPED"))
             except Exception as e:
-                self.log_message(f"Error stopping monitoring: {e}")
+                self.log_message(_("ERROR_STOPPING_MONITORING", error=str(e)))
         
         # Stop polling
         if self.poller:
@@ -494,34 +653,36 @@ class MainWindow(QMainWindow):
     def on_data_updated(self, data):
         """Handle new data from the simulator."""
         try:
+            na_text = _("N_A")
+            
             # Update aircraft info
             if 'acf_icao' in data:
-                self.ui.labelAircraftICAOValue.setText(str(data.get('acf_icao', 'N/A')))
+                self.ui.labelAircraftICAOValue.setText(str(data.get('acf_icao', na_text)))
             if 'acf_name' in data:
-                self.ui.labelAircraftNameValue.setText(str(data.get('acf_name', 'N/A')))
+                self.ui.labelAircraftNameValue.setText(str(data.get('acf_name', na_text)))
             
             # Update flight data
             if 'latitude' in data:
-                self.ui.labelLatitudeValue.setText(str(data.get('latitude', 'N/A')))
+                self.ui.labelLatitudeValue.setText(str(data.get('latitude', na_text)))
             if 'longitude' in data:
-                self.ui.labelLongitudeValue.setText(str(data.get('longitude', 'N/A')))
+                self.ui.labelLongitudeValue.setText(str(data.get('longitude', na_text)))
             if 'alt_msl' in data:
-                self.ui.labelAltitudeValue.setText(str(data.get('alt_msl', 'N/A')))
+                self.ui.labelAltitudeValue.setText(str(data.get('alt_msl', na_text)))
             if 'alt_agl' in data:
-                self.ui.labelAGLValue.setText(str(data.get('alt_agl', 'N/A')))
+                self.ui.labelAGLValue.setText(str(data.get('alt_agl', na_text)))
             if 'heading_true' in data:
-                self.ui.labelHeadingValue.setText(str(data.get('heading_true', 'N/A')))
+                self.ui.labelHeadingValue.setText(str(data.get('heading_true', na_text)))
             if 'gs' in data:
-                self.ui.labelGroundSpeedValue.setText(str(data.get('gs', 'N/A')))
+                self.ui.labelGroundSpeedValue.setText(str(data.get('gs', na_text)))
             if 'ias' in data:
-                self.ui.labelIndicatedSpeedValue.setText(str(data.get('ias', 'N/A')))
+                self.ui.labelIndicatedSpeedValue.setText(str(data.get('ias', na_text)))
             if 'power' in data:
-                self.ui.labelPowerValue.setText(str(data.get('power', 'N/A')))
+                self.ui.labelPowerValue.setText(str(data.get('power', na_text)))
             if 'sim_time' in data:
-                self.ui.labelSimTimeValue.setText(str(data.get('sim_time', 'N/A')))
+                self.ui.labelSimTimeValue.setText(str(data.get('sim_time', na_text)))
                 
         except Exception as e:
-            self.log_message(f"Error updating data display: {e}")
+            self.log_message(_("ERROR_UPDATING_DATA", error=str(e)))
     
     def on_poller_connection_changed(self, connected, status):
         """Handle poller connection status updates."""
@@ -538,11 +699,11 @@ class MainWindow(QMainWindow):
         """Handle flight state updates from poller."""
         self.ui.labelFlightStatus.setText(state_str)
         
-        # Set color based on state
+        # Set color based on state (using translated strings)
         palette = self.ui.labelFlightStatus.palette()
-        if state_str == "In Flight":
+        if state_str == _("FLIGHT_STATE_IN_FLIGHT"):
             palette.setColor(QPalette.ColorRole.WindowText, QColor("green"))
-        elif state_str == "Landed":
+        elif state_str == _("FLIGHT_STATE_LANDED"):
             palette.setColor(QPalette.ColorRole.WindowText, QColor("orange"))
         else:
             palette.setColor(QPalette.ColorRole.WindowText, QColor("blue"))
@@ -552,7 +713,7 @@ class MainWindow(QMainWindow):
         """Handle monitoring state updates from poller."""
         self.ui.labelMonitoringStatus.setText(state_str)
         palette = self.ui.labelMonitoringStatus.palette()
-        if state_str == "Running":
+        if state_str == _("MONITORING_RUNNING"):
             palette.setColor(QPalette.ColorRole.WindowText, QColor("green"))
         else:
             palette.setColor(QPalette.ColorRole.WindowText, QColor("red"))
@@ -561,29 +722,28 @@ class MainWindow(QMainWindow):
     
     def show_about(self):
         """Show about dialog."""
-        about_text = """
-        <h2>Flight Data Recorder</h2>
-        <p>Version 1.0.0</p>
-        <p>A tool for recording flight data from flight simulators to GeoJSON format.</p>
-        <p><b>Supported Simulators:</b></p>
+        about_text = f"""
+        <h2>{_("FLIGHT_DATA_RECORDER_TITLE")}</h2>
+        <p>{_("ABOUT_VERSION")}</p>
+        <p>{_("ABOUT_DESCRIPTION")}</p>
+        <p>{_("ABOUT_SUPPORTED_SIMULATORS")}</p>
         <ul>
-            <li>X-Plane 12 (via REST API on port 8086)</li>
-            <li>Microsoft Flight Simulator 2020/2024 (via SimConnect)</li>
-            <li>Prepar3D (via SimConnect)</li>
+            <li>{_("ABOUT_SIMULATOR_XPLANE")}</li>
+            <li>{_("ABOUT_SIMULATOR_MSFS")}</li>
+            <li>{_("ABOUT_SIMULATOR_P3D")}</li>
         </ul>
-        <p><b>Features:</b></p>
+        <p>{_("ABOUT_FEATURES")}</p>
         <ul>
-            <li>Real-time flight data recording</li>
-            <li>Auto-detection of takeoff and landing</li>
-            <li>GeoJSON output (RFC 7946 compliant)</li>
-            <li>Optional trajectory LineString for QGIS visualization</li>
-            <li>Manual or automatic connection modes</li>
+            <li>{_("ABOUT_FEATURE_REALTIME")}</li>
+            <li>{_("ABOUT_FEATURE_AUTO_DETECT")}</li>
+            <li>{_("ABOUT_FEATURE_GEOJSON")}</li>
+            <li>{_("ABOUT_FEATURE_TRAJECTORY")}</li>
+            <li>{_("ABOUT_FEATURE_CONNECTION_MODES")}</li>
         </ul>
-        <p><b>Output:</b> GeoJSON files with Point features for each data sample, 
-        optionally including a LineString feature for trajectory visualization.</p>
-        <p><b>Author:</b> AirRallies Development Team</p>
+        <p>{_("ABOUT_OUTPUT_DESC")}</p>
+        <p>{_("ABOUT_AUTHOR")}</p>
         """
-        QMessageBox.about(self, "About Flight Data Recorder", about_text)
+        QMessageBox.about(self, _("ABOUT_TITLE"), about_text)
     
     def closeEvent(self, event):
         """Handle window close event."""
@@ -599,9 +759,9 @@ def main():
     app = QApplication(sys.argv)
     
     # Set application details
-    app.setApplicationName("Flight Data Recorder")
+    app.setApplicationName(_("FLIGHT_DATA_RECORDER_TITLE"))
     app.setOrganizationName("AirRallies")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion(_("ABOUT_VERSION"))
     
     # Create and show main window
     window = MainWindow()
