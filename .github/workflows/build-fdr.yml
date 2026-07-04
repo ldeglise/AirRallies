@@ -1,0 +1,185 @@
+name: Build and Release FDR
+
+on:
+  push:
+    tags:
+      - 'v*'
+    paths:
+      - 'fdr/**'
+  pull_request:
+    paths:
+      - 'fdr/**'
+
+# Extraire la version du tag (ex: v1.0.0 -> 1.0.0)
+env:
+  APP_NAME: fdr
+  VERSION: ${{ github.ref_name }}
+
+jobs:
+  build-linux:
+    name: Build FDR for Linux
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        working-directory: fdr
+        run: |
+          python -m pip install --upgrade pip
+          pip install PySide6 pyinstaller
+
+      - name: Build with PyInstaller
+        working-directory: fdr
+        run: |
+          pyinstaller --onedir --name fdr --clean --distpath ./dist-linux --workpath ./build-linux fdr.py
+
+      - name: Run post-build script
+        working-directory: fdr
+        run: |
+          chmod +x post_build_linux.sh
+          ./post_build_linux.sh
+
+      - name: Create versioned archive
+        working-directory: fdr
+        run: |
+          # Extraire version sans le 'v' initial si present
+          VERSION_NO_V=${VERSION#v}
+          ARCHIVE_NAME=${APP_NAME}-linux-${VERSION_NO_V}
+          mkdir -p ../release
+          tar -czf ../release/${ARCHIVE_NAME}.tar.gz -C dist-linux .
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fdr-linux-${{ env.VERSION }}
+          path: release/
+          retention-days: 7
+
+  build-windows:
+    name: Build FDR for Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        working-directory: fdr
+        run: |
+          python -m pip install --upgrade pip
+          pip install PySide6 pyinstaller
+
+      - name: Build with PyInstaller
+        working-directory: fdr
+        run: |
+          pyinstaller --onedir --name fdr --clean --distpath ./dist-windows --workpath ./build-windows --windowed fdr.py
+
+      - name: Run post-build script
+        working-directory: fdr
+        run: post_build_windows.bat
+
+      - name: Create versioned archive
+        working-directory: fdr
+        run: |
+          $versionNoV = $env:VERSION.TrimStart('v')
+          $archiveName = "$env:APP_NAME-windows-$versionNoV"
+          New-Item -ItemType Directory -Force -Path "..\release"
+          Compress-Archive -Path "dist-windows\*" -DestinationPath "..\release\$archiveName.zip"
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fdr-windows-${{ env.VERSION }}
+          path: release/
+          retention-days: 7
+
+  build-macos:
+    name: Build FDR for macOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        working-directory: fdr
+        run: |
+          python -m pip install --upgrade pip
+          pip install PySide6 pyinstaller
+
+      - name: Build with PyInstaller
+        working-directory: fdr
+        run: |
+          pyinstaller --onedir --name fdr --clean --distpath ./dist-macos --workpath ./build-macos --windowed fdr.py
+
+      - name: Create versioned archive
+        working-directory: fdr
+        run: |
+          VERSION_NO_V=${VERSION#v}
+          ARCHIVE_NAME=${APP_NAME}-macos-${VERSION_NO_V}
+          mkdir -p ../release
+          tar -czf ../release/${ARCHIVE_NAME}.tar.gz -C dist-macos .
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fdr-macos-${{ env.VERSION }}
+          path: release/
+          retention-days: 7
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: false
+
+      - name: List downloaded artifacts
+        run: |
+          ls -R artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: FDR ${{ github.ref_name }}
+          body: |
+            ## Flight Data Recorder ${{ github.ref_name }}
+            
+            **Assets:**
+            - Linux: `.tar.gz`
+            - Windows: `.zip`
+            - macOS: `.tar.gz`
+            
+            All archives contain PySide6 libraries separated for GPL compliance.
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/fdr-linux-*/*.tar.gz
+            artifacts/fdr-windows-*/*.zip
+            artifacts/fdr-macos-*/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

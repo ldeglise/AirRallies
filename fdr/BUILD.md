@@ -328,108 +328,6 @@ pyinstaller --onedir --strip --upx-dir /path/to/upx fdr.py
 
 If you see warnings like `Library not found: could not resolve 'libtiff.so.5'`, these are non-critical warnings about optional dependencies. The build will still work correctly.
 
----
-
-## Automating with GitHub Actions
-
-Here's a template for GitHub Actions to build for multiple platforms:
-
-```yaml
-name: Build FDR
-
-on:
-  push:
-    tags:
-      - 'v*'
-
-jobs:
-  build-linux:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install PySide6 pyinstaller
-
-      - name: Build with PyInstaller
-        run: |
-          cd fdr
-          pyinstaller --onedir --name fdr --clean --distpath ./dist-linux --workpath ./build-linux fdr.py
-          chmod +x post_build_linux.sh
-          ./post_build_linux.sh
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: fdr-linux
-          path: fdr/dist-linux/
-
-  build-windows:
-    runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install PySide6 pyinstaller
-
-      - name: Build with PyInstaller
-        run: |
-          cd fdr
-          pyinstaller --onedir --name fdr --clean --distpath ./dist-windows --workpath ./build-windows --windowed fdr.py
-          post_build_windows.bat
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: fdr-windows
-          path: fdr/dist-windows/
-
-  build-macos:
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install PySide6 pyinstaller
-
-      - name: Build with PyInstaller
-        run: |
-          cd fdr
-          pyinstaller --onedir --name fdr --clean --distpath ./dist-macos --workpath ./build-macos --windowed fdr.py
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: fdr-macos
-          path: fdr/dist-macos/
-```
-
----
-
 ## File List
 
 | File | Purpose |
@@ -439,6 +337,7 @@ jobs:
 | `post_build_linux.sh` | Post-build script for Linux (separates PySide6 libraries) |
 | `post_build_windows.bat` | Post-build script for Windows (separates PySide6 libraries) |
 | `BUILD.md` | This documentation |
+| `.github/workflows/build-fdr.yml` | GitHub Actions workflow for CI builds |
 
 ---
 
