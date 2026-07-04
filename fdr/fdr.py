@@ -168,9 +168,6 @@ class MainWindow(QMainWindow):
         # Set initial state
         self._update_ui_state()
         
-        # Log startup message
-        self.log_message(_("LOG_STARTUP"))
-        
         # Set default output file path
         default_path = os.path.expanduser(f"~/flight_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
         self.ui.lineEditOutputFile.setText(default_path)
