@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - 'v*'
-    paths:
-      - 'fdr/**'
   pull_request:
     paths:
       - 'fdr/**'
