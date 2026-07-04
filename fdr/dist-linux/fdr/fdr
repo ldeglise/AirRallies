@@ -1,0 +1,15 @@
+#!/bin/bash
+# Flight Data Recorder Launcher
+# Configures environment for PySide6 GPL compliance
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYSIDE_DIR="${SCRIPT_DIR}/pyside6"
+
+# Add pyside6 libraries to LD_LIBRARY_PATH
+export LD_LIBRARY_PATH="${PYSIDE_DIR}/lib:${PYSIDE_DIR}/Qt/lib:${LD_LIBRARY_PATH}"
+
+# Add pyside6 to Qt plugin path
+export QT_PLUGIN_PATH="${PYSIDE_DIR}/plugins:${QT_PLUGIN_PATH}"
+
+# Execute the actual binary
+exec "${SCRIPT_DIR}/fdr.bin" "$@"
