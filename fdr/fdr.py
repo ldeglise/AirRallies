@@ -204,8 +204,9 @@ class MainWindow(QMainWindow):
     
     def _setup_language_menu(self):
         """Setup the Language menu in the menu bar."""
-        # Create Language menu
-        self.menuLanguage = self.ui.menubar.addMenu(_("LANGUAGE_MENU"))
+        # Create Language menu - insert before Help menu to keep Help as last
+        from PySide6.QtWidgets import QMenu
+        self.menuLanguage = QMenu(_("LANGUAGE_MENU"), self)
         
         # Add language actions
         self.actionEnglish = self.menuLanguage.addAction(_("LANGUAGE_ENGLISH"))
@@ -214,6 +215,9 @@ class MainWindow(QMainWindow):
         # Connect language actions
         self.actionEnglish.triggered.connect(lambda: set_language_both("en"))
         self.actionFrench.triggered.connect(lambda: set_language_both("fr"))
+        
+        # Insert Language menu before Help menu (so Help stays last on the right)
+        self.ui.menubar.insertMenu(self.ui.menuHelp.menuAction(), self.menuLanguage)
         
         # Mark current language
         current_lang = get_gui_language()
