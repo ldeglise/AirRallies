@@ -163,8 +163,8 @@ class MainWindow(QMainWindow):
         # Configure text browser for logging
         self.ui.textBrowserLog.setOpenExternalLinks(True)
         
-        # Set status bar label
-        self.ui.labelStatusBar.setText("Ready")
+        # Set initial status message using native status bar
+        self.statusBar().showMessage("Ready")
     
     def _connect_signals(self):
         """Connect all UI signals to their slots."""
@@ -270,8 +270,8 @@ class MainWindow(QMainWindow):
         # Add to text browser
         self.ui.textBrowserLog.append(formatted)
         
-        # Also update status bar
-        self.ui.labelStatusBar.setText(message)
+        # Show message in native status bar (temporary, auto-clears after timeout)
+        self.statusBar().showMessage(message, timeout=5000)
         
         # Auto-scroll to bottom
         from PySide6.QtGui import QTextCursor

@@ -730,11 +730,6 @@ p, li { white-space: pre-wrap; }
    <property name="sizeGripEnabled">
     <bool>true</bool>
    </property>
-   <widget class="QLabel" name="labelStatusBar">
-    <property name="text">
-     <string>Ready</string>
-    </property>
-   </widget>
   </widget>
   <action name="actionExit">
    <property name="text">

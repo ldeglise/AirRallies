@@ -92,10 +92,10 @@ class Ui_MainWindow(object):
         self.spinBoxPollInterval = QDoubleSpinBox(self.groupBoxSimulator)
         self.spinBoxPollInterval.setObjectName(u"spinBoxPollInterval")
         self.spinBoxPollInterval.setDecimals(1)
-        self.spinBoxPollInterval.setMinimum(0.1)
-        self.spinBoxPollInterval.setMaximum(10.0)
-        self.spinBoxPollInterval.setSingleStep(0.1)
-        self.spinBoxPollInterval.setValue(1.0)
+        self.spinBoxPollInterval.setMinimum(0)
+        self.spinBoxPollInterval.setMaximum(0)
+        self.spinBoxPollInterval.setSingleStep(0)
+        self.spinBoxPollInterval.setValue(0)
 
         self.formLayoutSimulator.setWidget(3, QFormLayout.FieldRole, self.spinBoxPollInterval)
 
@@ -436,8 +436,6 @@ class Ui_MainWindow(object):
         self.statusbar = QStatusBar(MainWindow)
         self.statusbar.setObjectName(u"statusbar")
         self.statusbar.setSizeGripEnabled(True)
-        self.labelStatusBar = QLabel(self.statusbar)
-        self.labelStatusBar.setObjectName(u"labelStatusBar")
         MainWindow.setStatusBar(self.statusbar)
 
         self.menubar.addAction(self.menuFile.menuAction())
@@ -529,6 +527,5 @@ class Ui_MainWindow(object):
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tabAdvanced), QCoreApplication.translate("MainWindow", u"Advanced", None))
         self.menuFile.setTitle(QCoreApplication.translate("MainWindow", u"File", None))
         self.menuHelp.setTitle(QCoreApplication.translate("MainWindow", u"Help", None))
-        self.labelStatusBar.setText(QCoreApplication.translate("MainWindow", u"Ready", None))
     # retranslateUi
 
