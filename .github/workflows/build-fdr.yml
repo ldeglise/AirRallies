@@ -41,7 +41,7 @@ jobs:
         working-directory: fdr
         run: |
           rm -rf ./dist-linux
-          pyinstaller --onedir --name fdr --clean --distpath ./dist-linux --workpath ./build-linux fdr.py
+          pyinstaller --onedir --name fdr --clean --distpath ./dist-linux --workpath ./build-linux --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --hidden-import shiboken6 fdr.py
 
       - name: Run post-build script (Linux)
         working-directory: fdr
@@ -87,7 +87,7 @@ jobs:
         working-directory: fdr
         run: |
           Remove-Item -Recurse -Force -Path "./dist-windows" -ErrorAction SilentlyContinue
-          pyinstaller --onedir --name fdr --clean --distpath ./dist-windows --workpath ./build-windows --windowed fdr.py
+          pyinstaller --onedir --name fdr --clean --distpath ./dist-windows --workpath ./build-windows --windowed --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --hidden-import shiboken6 fdr.py
 
       - name: Run post-build script (Windows)
         working-directory: fdr
@@ -131,7 +131,7 @@ jobs:
         working-directory: fdr
         run: |
           rm -rf ./dist-macos
-          pyinstaller --onedir --name fdr --clean --distpath ./dist-macos --workpath ./build-macos --windowed fdr.py
+          pyinstaller --onedir --name fdr --clean --distpath ./dist-macos --workpath ./build-macos --windowed --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --hidden-import shiboken6 fdr.py
 
       - name: Create versioned archive
         working-directory: fdr

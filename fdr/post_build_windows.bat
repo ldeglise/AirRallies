@@ -15,39 +15,51 @@ mkdir "%PYSIDE_DIR%\plugins"
 
 echo Separating PySide6 libraries...
 
-REM Move Qt6 DLLs from _internal root to pyside6\lib
-for /r "%DIST_DIR%\_internal" %%f in (*Qt6*.dll) do (
-    echo   Moving %%~nxf to pyside6\lib...
-    move "%%f" "%PYSIDE_DIR%\lib\" >nul
-)
-
-REM Move shiboken6 DLLs
-for /r "%DIST_DIR%\_internal" %%f in (*shiboken*.dll) do (
-    echo   Moving %%~nxf to pyside6\lib...
-    move "%%f" "%PYSIDE_DIR%\lib\" >nul
-)
-
-REM Copy Qt6 libraries from PySide6\Qt\lib to pyside6\Qt\lib
-if exist "%DIST_DIR%\_internal\PySide6\Qt\lib\" (
-    echo   Copying Qt libraries to pyside6\Qt\lib...
-    xcopy "%DIST_DIR%\_internal\PySide6\Qt\lib\*.*" "%PYSIDE_DIR%\Qt\lib\" /E /Y /Q >nul
-)
-
-REM Copy Qt plugins
-if exist "%DIST_DIR%\_internal\PySide6\Qt\plugins\" (
-    echo   Copying Qt plugins to pyside6\plugins...
-    xcopy "%DIST_DIR%\_internal\PySide6\Qt\plugins\*" "%PYSIDE_DIR%\plugins\" /E /Y /Q >nul
-)
-
-REM Copy PySide6 and shiboken6 directories (instead of mklink)
+REM First, copy PySide6 and shiboken6 directories to pyside6
 if exist "%DIST_DIR%\_internal\PySide6" (
     echo   Copying PySide6 to pyside6...
-    xcopy "%DIST_DIR%\_internal\PySide6" "%PYSIDE_DIR%\PySide6\" /E /Y /Q >nul
+    xcopy "%DIST_DIR%\_internal\PySide6" "%PYSIDE_DIR%\PySide6" /E /Y /Q >nul
 )
 
 if exist "%DIST_DIR%\_internal\shiboken6" (
     echo   Copying shiboken6 to pyside6...
-    xcopy "%DIST_DIR%\_internal\shiboken6" "%PYSIDE_DIR%\shiboken6\" /E /Y /Q >nul
+    xcopy "%DIST_DIR%\_internal\shiboken6" "%PYSIDE_DIR%\shiboken6" /E /Y /Q >nul
+)
+
+REM Copy all Qt6 DLLs from _internal to pyside6\lib (use copy, not move!)
+for /r "%DIST_DIR%\_internal" %%f in (*Qt6*.dll) do (
+    echo   Copying %%~nxf to pyside6\lib...
+    copy "%%f" "%PYSIDE_DIR%\lib" >nul
+)
+
+REM Copy all shiboken6 DLLs from _internal to pyside6\lib (use copy, not move!)
+for /r "%DIST_DIR%\_internal" %%f in (*shiboken*.dll) do (
+    echo   Copying %%~nxf to pyside6\lib...
+    copy "%%f" "%PYSIDE_DIR%\lib" >nul
+)
+
+REM Copy any PySide6 DLLs from _internal\PySide6 directory
+if exist "%DIST_DIR%\_internal\PySide6\*.dll" (
+    echo   Copying PySide6 DLLs to pyside6\lib...
+    copy "%DIST_DIR%\_internal\PySide6\*.dll" "%PYSIDE_DIR%\lib" >nul
+)
+
+REM Copy any shiboken6 DLLs from _internal\shiboken6 directory
+if exist "%DIST_DIR%\_internal\shiboken6\*.dll" (
+    echo   Copying shiboken6 DLLs to pyside6\lib...
+    copy "%DIST_DIR%\_internal\shiboken6\*.dll" "%PYSIDE_DIR%\lib" >nul
+)
+
+REM Copy Qt6 libraries from PySide6\Qt\lib to pyside6\Qt\lib
+if exist "%DIST_DIR%\_internal\PySide6\Qt\lib" (
+    echo   Copying Qt libraries to pyside6\Qt\lib...
+    xcopy "%DIST_DIR%\_internal\PySide6\Qt\lib\*.*" "%PYSIDE_DIR%\Qt\lib" /E /Y /Q >nul
+)
+
+REM Copy Qt plugins
+if exist "%DIST_DIR%\_internal\PySide6\Qt\plugins" (
+    echo   Copying Qt plugins to pyside6\plugins...
+    xcopy "%DIST_DIR%\_internal\PySide6\Qt\plugins\*" "%PYSIDE_DIR%\plugins" /E /Y /Q >nul
 )
 
 REM Backup original executable
@@ -67,6 +79,9 @@ REM Create launcher batch file
     echo.
     echo REM Add PySide6 libraries to PATH
     echo set PATH=%%PYSIDE_DIR%%\lib;%%PYSIDE_DIR%%\Qt\lib;%%PATH%%
+    echo.
+    echo REM Add PySide6 to Python path
+    echo set PYTHONPATH=%%PYSIDE_DIR%%\PySide6;%%PYSIDE_DIR%%\shiboken6;%%PYTHONPATH%%
     echo.
     echo REM Add PySide6 to Qt plugin path
     echo set QT_PLUGIN_PATH=%%PYSIDE_DIR%%\plugins;%%QT_PLUGIN_PATH%%
