@@ -268,10 +268,6 @@ class MainWindow(QMainWindow):
         self.ui.labelOutputFile.setText(_("OUTPUT_FILE"))
         self.ui.lineEditOutputFile.setPlaceholderText(_("OUTPUT_FILE_PLACEHOLDER"))
         self.ui.pushButtonBrowse.setText(_("BROWSE_BUTTON"))
-        self.ui.checkBoxIncludeTrajectory.setText(_("INCLUDE_TRAJECTORY"))
-        self.ui.checkBoxIncludeTrajectory.setToolTip(_("INCLUDE_TRAJECTORY_TOOLTIP"))
-        self.ui.checkBoxAutoConnect.setText(_("AUTO_CONNECT"))
-        self.ui.checkBoxAutoConnect.setToolTip(_("AUTO_CONNECT_TOOLTIP"))
         
         # Update Controls group
         self.ui.groupBoxControls.setTitle(_("CONTROLS"))
@@ -349,9 +345,7 @@ class MainWindow(QMainWindow):
         self.ui.spinBoxPort.valueChanged.connect(self._validate_settings)
         self.ui.spinBoxPollInterval.valueChanged.connect(self._validate_settings)
         
-        # Checkbox changes
-        self.ui.checkBoxAutoConnect.stateChanged.connect(self._validate_settings)
-        self.ui.checkBoxIncludeTrajectory.stateChanged.connect(self._validate_settings)
+
     
     def _validate_settings(self):
         """Validate that all settings are valid."""
@@ -415,13 +409,7 @@ class MainWindow(QMainWindow):
         """Get the current output file path."""
         return self.ui.lineEditOutputFile.text().strip()
     
-    def _get_include_trajectory(self):
-        """Get whether to include trajectory."""
-        return self.ui.checkBoxIncludeTrajectory.isChecked()
-    
-    def _get_auto_connect(self):
-        """Get whether to auto-connect."""
-        return self.ui.checkBoxAutoConnect.isChecked()
+
     
     def log_message(self, message):
         """Add a message to the log display."""
@@ -467,8 +455,7 @@ class MainWindow(QMainWindow):
         port = self._get_port()
         poll_interval = self._get_poll_interval()
         output_file = self._get_output_file()
-        include_trajectory = self._get_include_trajectory()
-        auto_connect = self._get_auto_connect()
+        include_trajectory = True  # Always include trajectory line
         
         if not output_file:
             self.log_message(_("ERROR_NO_OUTPUT_FILE"))
@@ -592,8 +579,7 @@ class MainWindow(QMainWindow):
             return
         
         # Check if we need to recreate monitor with new settings
-        if (self.monitor.geojson_writer.filepath != output_file or
-            self._get_include_trajectory() != self.monitor.geojson_writer._include_trajectory):
+        if self.monitor.geojson_writer.filepath != output_file:
             self.log_message(_("OUTPUT_CHANGED"))
             self.create_monitor_instance()
         
@@ -601,9 +587,7 @@ class MainWindow(QMainWindow):
             return
         
         try:
-            # Set auto-connect based on preference
-            if self._get_auto_connect() and not self.monitor.is_connected:
-                self.monitor.connect()
+            # Auto-connect has been removed - manual connection is now required
             
             # Start monitoring
             self.monitor.start_monitoring()

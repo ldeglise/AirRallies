@@ -163,32 +163,6 @@
                </item>
               </layout>
              </item>
-             <item row="2" column="0">
-              <widget class="QCheckBox" name="checkBoxIncludeTrajectory">
-               <property name="text">
-                <string>Include Trajectory Line</string>
-               </property>
-               <property name="toolTip">
-                <string>Add a LineString feature for trajectory visualization in QGIS</string>
-               </property>
-               <property name="checked">
-                <bool>true</bool>
-               </property>
-              </widget>
-             </item>
-             <item row="3" column="0">
-              <widget class="QCheckBox" name="checkBoxAutoConnect">
-               <property name="text">
-                <string>Auto-connect on Start</string>
-               </property>
-               <property name="toolTip">
-                <string>Automatically connect to simulator when monitoring starts</string>
-               </property>
-               <property name="checked">
-                <bool>true</bool>
-               </property>
-              </widget>
-             </item>
             </layout>
            </widget>
           </item>
