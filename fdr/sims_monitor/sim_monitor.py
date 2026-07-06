@@ -873,17 +873,17 @@ class MSFSMonitor(BaseSimulatorMonitor):
 
 class _XPlaneAPI:
     """
-    Encapsule le protocole REST X-Plane 12 v3.
+    Encapsule le protocole REST X-Plane 12.
     
     Protocole:
-      1. GET /api/v3/datarefs?filter[name]=<path> → résolution path → id
-      2. GET /api/v3/datarefs/<id>/value → lecture de la valeur
+      1. GET /API/dataref → liste toutes les datarefs
+      2. GET /API/dataref/<id>/value → lecture de la valeur
     
     Les datarefs de type "data" (string) sont retournées encodées en base64.
     """
 
     def __init__(self, host: str, port: int):
-        self._base = f"http://{host}:{port}/api/v3"
+        self._base = f"http://{host}:{port}/API"
         self._cache: dict[str, int] = {}
         self._types: dict[str, str] = {}
         self._session = None
@@ -904,28 +904,45 @@ class _XPlaneAPI:
             self._session = requests.Session()
             self._session.headers.update({"Accept": "application/json"})
 
+        # Récupérer toutes les datarefs une seule fois et créer un mapping local
+        resp = self._session.get(
+            f"{self._base}/dataref",
+            timeout=10,
+        )
+        resp.raise_for_status()
+        json_data = resp.json()
+        # L'API peut retourner un tableau directement ou un objet avec clé "data"
+        if isinstance(json_data, list):
+            all_datarefs = json_data
+        else:
+            all_datarefs = json_data.get("data", [])
+        
+        # Créer un mapping path -> id pour une résolution rapide
+        path_to_id = {}
+        for dr in all_datarefs:
+            path_to_id[dr.get("name", "")] = (dr.get("id"), dr.get("value_type", ""))
+        
+        # Résoudre chaque chemin demandé
         for key, path in paths.items():
-            resp = self._session.get(
-                f"{self._base}/datarefs",
-                params={"filter[name]": path},
-                timeout=5,
-            )
-            resp.raise_for_status()
-            records = resp.json()["data"]
-            if not records:
+            if path in path_to_id:
+                self._cache[key] = path_to_id[path][0]
+                self._types[key] = path_to_id[path][1]
+            else:
                 raise ValueError(_("DATAREF_NOT_FOUND", path=path))
-            self._cache[key] = records[0]["id"]
-            self._types[key] = records[0]["value_type"]
 
     def _fetch_value(self, key: str) -> Any:
         """Récupère la valeur brute d'une dataref."""
         dr_id = self._cache[key]
         resp = self._session.get(
-            f"{self._base}/datarefs/{dr_id}/value",
+            f"{self._base}/dataref/{dr_id}/value",
             timeout=3,
         )
         resp.raise_for_status()
-        return resp.json()["data"]
+        json_data = resp.json()
+        # L'API peut retourner la valeur directement ou dans un objet avec clé "data"
+        if isinstance(json_data, dict):
+            return json_data.get("data")
+        return json_data
 
     def get_float(self, key: str) -> float:
         """Récupère une valeur flottante."""
