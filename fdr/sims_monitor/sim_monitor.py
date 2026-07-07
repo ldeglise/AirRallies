@@ -482,13 +482,13 @@ class BaseSimulatorMonitor(ABC):
     
     def _format_error_message(self) -> Optional[str]:
         """Formate le message d'erreur à partir de l'ID et des arguments."""
+        from .translations import gettext as _trans
         with self._lock:
             if self._last_error_id:
-                from .translations import gettext as sim_trans
                 if self._last_error_args:
-                    return sim_trans(self._last_error_id, **self._last_error_args)
+                    return _trans(self._last_error_id, **self._last_error_args)
                 else:
-                    return sim_trans(self._last_error_id)
+                    return _trans(self._last_error_id)
             return None
     
     def get_last_error(self) -> Optional[str]:
@@ -727,6 +727,8 @@ class BaseSimulatorMonitor(ABC):
         
         Enregistre uniquement les points entre le décollage et l'atterrissage.
         """
+        from .translations import gettext as _
+        
         # Tentative de connexion initiale (uniquement en mode automatique)
         if self._auto_connect:
             if not self._do_connect():
@@ -750,7 +752,7 @@ class BaseSimulatorMonitor(ABC):
                         # En mode automatique, réessayer la connexion
                         if not self._do_connect():
                             # Attendre avant de réessayer
-                            for _ in range(int(self.poll_interval * 10)):
+                            for i in range(int(self.poll_interval * 10)):
                                 if not self._running:
                                     break
                                 time.sleep(0.1)
@@ -758,7 +760,7 @@ class BaseSimulatorMonitor(ABC):
                         self._notify_connection_status(True, _("RECONNECTED"))
                     else:
                         # En mode manuel, skipper ce cycle
-                        for _ in range(int(self.poll_interval * 10)):
+                        for i in range(int(self.poll_interval * 10)):
                             if not self._running:
                                 break
                             time.sleep(0.1)
@@ -779,7 +781,7 @@ class BaseSimulatorMonitor(ABC):
                         break
                 
                 # Attendre l'intervalle de polling
-                for _ in range(int(self.poll_interval * 10)):
+                for i in range(int(self.poll_interval * 10)):
                     if not self._running:
                         break
                     time.sleep(0.1)
