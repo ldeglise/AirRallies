@@ -53,9 +53,20 @@ _FR_TRANSLATIONS: Dict[str, str] = {
     # XPlaneMonitor errors
     "REQUESTS_NOT_INSTALLED": "Module 'requests' non installé",
     "XPLANE_CONNECTION_FAILED": "Échec de connexion X-Plane: {error}",
+    "XPLANE_NOT_RUNNING": "X-Plane n'est pas en cours d'exécution ou l'API REST n'est pas accessible sur {host}:{port}",
+    "XPLANE_API_TIMEOUT": "Timeout lors de la connexion à l'API X-Plane sur {host}:{port}",
+    "XPLANE_API_ERROR": "Erreur de l'API X-Plane: {error}",
+    "XPLANE_NETWORK_ERROR": "Erreur réseau lors de la connexion à X-Plane: {error}",
+    "XPLANE_WRONG_ENDPOINT": "Impossible de se connecter à l'API X-Plane sur {host}:{port}. Vérifiez que le plugin X-Plane Connect est installé ou que l'API native est activée dans les paramètres de X-Plane.",
+    "XPLANE_CHECK_HTTP_SERVER": "Vérifiez que 'Enable HTTP Server' est activé dans Settings > Network de X-Plane (port par défaut: 8080).",
+    "XPLANE_INCOMING_TRAFFIC_DISABLED": "Le trafic entrant est désactivé dans les paramètres réseau de X-Plane. Activez 'Enable Incoming Traffic' dans Settings > Network.",
+    "XPLANE_INVALID_API_RESPONSE_FORMAT": "Format de réponse de l'API X-Plane invalide.",
+    "XPLANE_DATAREF_TIMEOUT": "Timeout lors de la lecture de la dataref {key} (ID: {id}).",
+    "XPLANE_HTTP_ERROR": "Erreur HTTP {status} lors de la connexion à X-Plane.",
     
     # _XPlaneAPI errors
     "DATAREF_NOT_FOUND": "Dataref introuvable: {path}",
+    "XPLANE_INVALID_API_RESPONSE": "Réponse de l'API X-Plane invalide: {error}",
     
     # create_monitor errors
     "UNKNOWN_SIMULATOR_TYPE": "Type de simulateur inconnu: '{simulator_type}'. Utilisez '{msfs}' ou '{xplane}'",
@@ -88,9 +99,20 @@ _EN_TRANSLATIONS: Dict[str, str] = {
     # XPlaneMonitor errors
     "REQUESTS_NOT_INSTALLED": "'requests' module not installed",
     "XPLANE_CONNECTION_FAILED": "X-Plane connection failed: {error}",
+    "XPLANE_NOT_RUNNING": "X-Plane is not running or REST API is not accessible at {host}:{port}",
+    "XPLANE_API_TIMEOUT": "Timeout connecting to X-Plane API at {host}:{port}",
+    "XPLANE_API_ERROR": "X-Plane API error: {error}",
+    "XPLANE_NETWORK_ERROR": "Network error connecting to X-Plane: {error}",
+    "XPLANE_WRONG_ENDPOINT": "Cannot connect to X-Plane API at {host}:{port}. Check that X-Plane Connect plugin is installed or that the native HTTP server is enabled in X-Plane Settings > Network.",
+    "XPLANE_CHECK_HTTP_SERVER": "Check that 'Enable HTTP Server' is enabled in X-Plane Settings > Network (default port: 8080).",
+    "XPLANE_INCOMING_TRAFFIC_DISABLED": "Incoming traffic is disabled in X-Plane Network settings. Enable 'Allow Incoming Traffic' in Settings > Network.",
+    "XPLANE_INVALID_API_RESPONSE_FORMAT": "Invalid X-Plane API response format.",
+    "XPLANE_DATAREF_TIMEOUT": "Timeout reading dataref {key} (ID: {id}).",
+    "XPLANE_HTTP_ERROR": "HTTP error {status} connecting to X-Plane.",
     
     # _XPlaneAPI errors
     "DATAREF_NOT_FOUND": "Dataref not found: {path}",
+    "XPLANE_INVALID_API_RESPONSE": "Invalid X-Plane API response: {error}",
     
     # create_monitor errors
     "UNKNOWN_SIMULATOR_TYPE": "Unknown simulator type: '{simulator_type}'. Use '{msfs}' or '{xplane}'",

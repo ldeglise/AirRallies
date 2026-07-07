@@ -527,9 +527,9 @@ class MainWindow(QMainWindow):
     
     def on_connect(self):
         """Handle Connect button click."""
-        # Ensure we have a monitor
-        if not self.monitor:
-            self.create_monitor_instance()
+        # Always recreate monitor with current settings to pick up any changes
+        # (host, port, output file, etc.)
+        self.create_monitor_instance()
         
         if not self.monitor:
             return
@@ -543,10 +543,19 @@ class MainWindow(QMainWindow):
                 # Start polling live data
                 self.start_polling()
             else:
-                self.log_message(_("CONNECT_FAILED"))
+                # Get error ID and args, then format using GUI translations
+                error_id = self.monitor.get_last_error_id()
+                error_args = self.monitor.get_last_error_args() or {}
+                if error_id:
+                    # Use GUI translation
+                    error_msg = _(error_id, **error_args)
+                else:
+                    error_msg = _("CONNECT_FAILED")
+                self.log_message(error_msg)
+                QMessageBox.warning(self, _("CONNECTION_FAILED"), error_msg)
         except Exception as e:
             self.log_message(_("CONNECTION_ERROR", error=str(e)))
-            QMessageBox.critical(self, _("CONNECTION_ERROR", error=""), str(e))
+            QMessageBox.critical(self, _("CONNECTION_ERROR"), str(e))
     
     def on_disconnect(self):
         """Handle Disconnect button click."""
@@ -588,6 +597,10 @@ class MainWindow(QMainWindow):
         
         try:
             # Auto-connect has been removed - manual connection is now required
+            # Check if we are connected
+            if not self.monitor.is_connected:
+                QMessageBox.warning(self, _("NOT_CONNECTED"), _("CONNECT_FIRST"))
+                return
             
             # Start monitoring
             self.monitor.start_monitoring()
@@ -600,7 +613,7 @@ class MainWindow(QMainWindow):
             
         except Exception as e:
             self.log_message(_("ERROR_STARTING_MONITORING", error=str(e)))
-            QMessageBox.critical(self, _("ERROR_NO_OUTPUT_FILE"), _("FAILED_START_MONITORING", error=str(e)))
+            QMessageBox.critical(self, _("ERROR_STARTING_MONITORING"), _("FAILED_START_MONITORING", error=str(e)))
     
     def on_stop_monitoring(self):
         """Handle Stop Monitoring button click."""

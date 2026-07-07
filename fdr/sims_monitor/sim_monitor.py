@@ -58,6 +58,13 @@ Notes :
     - L'enregistrement s'arrête automatiquement à l'atterrissage (GS <= 30kt ET AGL = 0 pendant > 5s)
     - Utilise monitor.flight_state pour connaître l'état actuel (WAITING, IN_FLIGHT, LANDED)
 
+    Pour X-Plane 12:
+    - Utilise l'API Web native de X-Plane (disponible depuis XP12.1.1)
+    - Endpoint API: http://localhost:8086/api/v3/ (version 3, XP12.4.0+)
+    - Assurez-vous que "Enable HTTP Server" est activé dans Settings > Network
+    - Le trafic entrant doit être autorisé (pas "Disable Incoming Traffic")
+    - Documentation: https://developer.x-plane.com/article/x-plane-web-api/
+
 Auteurs : Adapté des moniteurs originaux MSFS et X-Plane
 """
 
@@ -410,6 +417,8 @@ class BaseSimulatorMonitor(ABC):
         self._monitor_thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
         self._auto_connect = auto_connect
+        self._last_error_id: Optional[str] = None
+        self._last_error_args: Optional[dict] = None
         
         # État de vol pour détection décollage/atterrissage
         self._flight_state = FlightState.WAITING
@@ -441,12 +450,55 @@ class BaseSimulatorMonitor(ABC):
         """
         result = self._do_connect()
         if result:
+            self._last_error_id = None
+            self._last_error_args = None
             self._notify_connection_status(True, _("CONNECTED"))
         else:
             # en cas d'erreur, notifier avec un message générique
             # (les implémentations peuvent fournir plus de détails via _do_connect)
-            self._notify_connection_status(False, _("CONNECTION_FAILED"))
+            error_msg = self._format_error_message() or _("CONNECTION_FAILED")
+            self._notify_connection_status(False, error_msg)
         return result
+    
+    def get_last_error_id(self) -> Optional[str]:
+        """
+        Retourne l'ID de la dernière erreur de connexion.
+        
+        Returns:
+            ID de l'erreur ou None si pas d'erreur
+        """
+        with self._lock:
+            return self._last_error_id
+    
+    def get_last_error_args(self) -> Optional[dict]:
+        """
+        Retourne les arguments de formatage de la dernière erreur.
+        
+        Returns:
+            Dictionnaire d'arguments ou None
+        """
+        with self._lock:
+            return self._last_error_args
+    
+    def _format_error_message(self) -> Optional[str]:
+        """Formate le message d'erreur à partir de l'ID et des arguments."""
+        with self._lock:
+            if self._last_error_id:
+                from .translations import gettext as sim_trans
+                if self._last_error_args:
+                    return sim_trans(self._last_error_id, **self._last_error_args)
+                else:
+                    return sim_trans(self._last_error_id)
+            return None
+    
+    def get_last_error(self) -> Optional[str]:
+        """
+        Retourne la dernière erreur de connexion (message formaté).
+        
+        Returns:
+            Message d'erreur ou None si pas d'erreur
+        """
+        return self._format_error_message()
 
     @abstractmethod
     def disconnect(self) -> None:
@@ -868,114 +920,258 @@ class MSFSMonitor(BaseSimulatorMonitor):
         return total / FT_LB_PER_S_TO_HP
 
 # ---------------------------------------------------------------------------
-# API X-Plane (interne)
+# API X-Plane (interne) - Corrigé selon documentation officielle X-Plane 12
 # ---------------------------------------------------------------------------
 
 class _XPlaneAPI:
     """
-    Encapsule le protocole REST X-Plane 12.
+    Encapsule le protocole REST X-Plane 12 (API Web native depuis XP12.1.1).
+    
+    Basé sur la documentation officielle:
+    https://developer.x-plane.com/article/x-plane-web-api/
     
     Protocole:
-      1. GET /API/dataref → liste toutes les datarefs
-      2. GET /API/dataref/<id>/value → lecture de la valeur
+      1. GET /api/v3/datarefs → liste toutes les datarefs
+      2. GET /api/v3/datarefs/{id}/value → lecture de la valeur
     
     Les datarefs de type "data" (string) sont retournées encodées en base64.
+    Toutes les réponses suivent le format: {"data": valeur} ou {"data": [liste]}
     """
 
+    # Version de l'API à utiliser (v3 est la plus récente, disponible depuis XP12.4.0)
+    API_VERSION = "v3"
+
     def __init__(self, host: str, port: int):
-        self._base = f"http://{host}:{port}/API"
-        self._cache: dict[str, int] = {}
-        self._types: dict[str, str] = {}
+        self.host = host
+        self.port = port
+        self._base = f"http://{host}:{port}"
+        self._api_base = f"{self._base}/api/{self.API_VERSION}"
+        self._cache: dict[str, int] = {}  # cache: clé -> id numérique
+        self._types: dict[str, str] = {}  # cache: clé -> type de valeur
         self._session = None
 
     def resolve_ids(self, paths: dict[str, str]) -> None:
         """
-        Résout les IDs numériques des datarefs.
+        Résout les IDs numériques des datarefs en utilisant l'API officielle.
         
         Args:
             paths: Dictionnaire {clé: chemin_dataref}
         
         Raises:
             ValueError: Si une dataref est introuvable
-            requests.exceptions.RequestException: En cas d'erreur réseau
+            requests.exceptions.RequestException: En cas d'erreur réseau ou HTTP
         """
         import requests
         if self._session is None:
             self._session = requests.Session()
-            self._session.headers.update({"Accept": "application/json"})
+            self._session.headers.update({
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            })
 
-        # Récupérer toutes les datarefs une seule fois et créer un mapping local
-        resp = self._session.get(
-            f"{self._base}/dataref",
-            timeout=10,
-        )
-        resp.raise_for_status()
-        json_data = resp.json()
-        # L'API peut retourner un tableau directement ou un objet avec clé "data"
-        if isinstance(json_data, list):
-            all_datarefs = json_data
-        else:
-            all_datarefs = json_data.get("data", [])
+        # Récupérer toutes les datarefs via l'API officielle
+        datarefs = self._fetch_all_datarefs()
         
-        # Créer un mapping path -> id pour une résolution rapide
-        path_to_id = {}
-        for dr in all_datarefs:
-            path_to_id[dr.get("name", "")] = (dr.get("id"), dr.get("value_type", ""))
+        # Créer un mapping name -> (id, value_type) pour une résolution rapide
+        name_to_info = {}
+        for dr in datarefs:
+            name = dr.get("name", "")
+            if name:  # Ignorer les entrées sans nom
+                name_to_info[name] = (dr.get("id"), dr.get("value_type", ""))
         
         # Résoudre chaque chemin demandé
         for key, path in paths.items():
-            if path in path_to_id:
-                self._cache[key] = path_to_id[path][0]
-                self._types[key] = path_to_id[path][1]
+            if path in name_to_info:
+                dr_id, dr_type = name_to_info[path]
+                self._cache[key] = dr_id
+                self._types[key] = dr_type
             else:
                 raise ValueError(_("DATAREF_NOT_FOUND", path=path))
+    
+    def _fetch_all_datarefs(self) -> list:
+        """
+        Récupère toutes les datarefs via l'API REST officielle.
+        
+        Utilise l'endpoint: GET /api/v3/datarefs
+        
+        Returns:
+            Liste de toutes les datarefs (chaque élément a id, name, value_type)
+            
+        Raises:
+            requests.exceptions.RequestException: Si la requête échoue
+        """
+        import requests
+        
+        endpoint = f"{self._api_base}/datarefs"
+        
+        try:
+            resp = self._session.get(endpoint, timeout=10)
+            
+            # Gérer les erreurs HTTP spécifiques
+            if resp.status_code == 403:
+                # "Disable Incoming Traffic" est activé dans les paramètres réseau
+                error_msg = _(
+                    "XPLANE_INCOMING_TRAFFIC_DISABLED",
+                    host=self.host,
+                    port=self.port
+                )
+                raise requests.exceptions.HTTPError(error_msg, response=resp)
+            
+            resp.raise_for_status()
+            json_data = resp.json()
+            
+            # L'API retourne toujours {"data": [liste de datarefs]}
+            if isinstance(json_data, dict):
+                datarefs = json_data.get("data", [])
+                if isinstance(datarefs, list):
+                    return datarefs
+                else:
+                    raise ValueError(_("XPLANE_INVALID_API_RESPONSE_FORMAT"))
+            elif isinstance(json_data, list):
+                # Format alternatif (anciennes versions)
+                return json_data
+            else:
+                raise ValueError(_("XPLANE_INVALID_API_RESPONSE_FORMAT"))
+                
+        except requests.exceptions.Timeout:
+            error_msg = _("XPLANE_API_TIMEOUT", host=self.host, port=self.port, endpoint=endpoint)
+            raise requests.exceptions.Timeout(error_msg)
+        except requests.exceptions.ConnectionError:
+            error_msg = _(
+                "XPLANE_CONNECTION_FAILED",
+                host=self.host,
+                port=self.port
+            ) + " " + _("XPLANE_CHECK_HTTP_SERVER")
+            raise requests.exceptions.ConnectionError(error_msg)
 
     def _fetch_value(self, key: str) -> Any:
-        """Récupère la valeur brute d'une dataref."""
+        """
+        Récupère la valeur brute d'une dataref.
+        
+        Utilise l'endpoint: GET /api/v3/datarefs/{id}/value
+        
+        Args:
+            key: Clé dans le cache (ex: "latitude")
+            
+        Returns:
+            La valeur brute de la dataref (peut être float, list, string, etc.)
+            
+        Raises:
+            KeyError: Si la clé n'est pas dans le cache
+            requests.exceptions.RequestException: En cas d'erreur HTTP
+        """
+        if key not in self._cache:
+            raise KeyError(f"Dataref key '{key}' not resolved. Call resolve_ids() first.")
+            
         dr_id = self._cache[key]
-        resp = self._session.get(
-            f"{self._base}/dataref/{dr_id}/value",
-            timeout=3,
-        )
-        resp.raise_for_status()
-        json_data = resp.json()
-        # L'API peut retourner la valeur directement ou dans un objet avec clé "data"
-        if isinstance(json_data, dict):
-            return json_data.get("data")
-        return json_data
+        endpoint = f"{self._api_base}/datarefs/{dr_id}/value"
+        
+        try:
+            resp = self._session.get(endpoint, timeout=3)
+            
+            # Gérer l'erreur 403
+            if resp.status_code == 403:
+                error_msg = _(
+                    "XPLANE_INCOMING_TRAFFIC_DISABLED",
+                    host=self.host,
+                    port=self.port
+                )
+                raise requests.exceptions.HTTPError(error_msg, response=resp)
+            
+            resp.raise_for_status()
+            json_data = resp.json()
+            
+            # L'API retourne toujours {"data": valeur}
+            if isinstance(json_data, dict):
+                return json_data.get("data")
+            else:
+                # Format alternatif (anciennes versions)
+                return json_data
+                
+        except requests.exceptions.Timeout:
+            error_msg = _("XPLANE_DATAREF_TIMEOUT", key=key, id=dr_id)
+            raise requests.exceptions.Timeout(error_msg)
 
     def get_float(self, key: str) -> float:
-        """Récupère une valeur flottante."""
-        return float(self._fetch_value(key))
+        """
+        Récupère une valeur flottante.
+        
+        Args:
+            key: Clé de la dataref
+            
+        Returns:
+            Valeur flottante
+            
+        Raises:
+            ValueError: Si la conversion en float échoue
+        """
+        raw = self._fetch_value(key)
+        if raw is None:
+            raise ValueError(f"Dataref '{key}' returned None")
+        return float(raw)
 
     def get_float_array(self, key: str) -> list[float]:
-        """Récupère un tableau de flottants."""
+        """
+        Récupère un tableau de flottants.
+        
+        Args:
+            key: Clé de la dataref
+            
+        Returns:
+            Liste de valeurs flottantes
+        """
         val = self._fetch_value(key)
+        if val is None:
+            return []
         if isinstance(val, list):
             return [float(v) for v in val if v is not None]
-        return [float(val)]
+        else:
+            # Si ce n'est pas une liste, essayer de convertir en liste
+            try:
+                return [float(val)]
+            except (ValueError, TypeError):
+                return []
 
     def get_string(self, key: str) -> str:
         """
         Récupère une chaîne de caractères.
-        Décode base64 si nécessaire et retire les octets nuls.
+        
+        Pour les datarefs de type "data" (string), X-Plane retourne
+        une chaîne encodée en base64.
+        
+        Args:
+            key: Clé de la dataref
+            
+        Returns:
+            Chaîne décodée et nettoyée
         """
         import base64
         raw = self._fetch_value(key)
+        
+        if raw is None:
+            return ""
+            
         if isinstance(raw, str):
+            # Essayer de décoder base64
             try:
                 decoded = base64.b64decode(raw)
                 return decoded.rstrip(b"\x00").decode("utf-8", errors="replace").strip()
             except Exception:
+                # Si ce n'est pas du base64 valide, retourner tel quel
                 return raw.strip()
-        if isinstance(raw, list):
+        elif isinstance(raw, list):
+            # Pour les tableaux d'octets
             return bytes(b for b in raw if b != 0).decode("utf-8", errors="replace").strip()
-        return str(raw).strip()
+        else:
+            return str(raw).strip()
 
     def close(self) -> None:
         """Ferme la session HTTP."""
         if self._session:
-            self._session.close()
+            try:
+                self._session.close()
+            except Exception:
+                pass
             self._session = None
 
 # ---------------------------------------------------------------------------
@@ -985,9 +1181,12 @@ class _XPlaneAPI:
 class XPlaneMonitor(BaseSimulatorMonitor):
     """
     Moniteur pour X-Plane 12 via API REST (port 8086 par défaut).
+    
+    Utilise l'API Web native de X-Plane 12 (disponible depuis XP12.1.1).
+    Documentation: https://developer.x-plane.com/article/x-plane-web-api/
     """
 
-    # Datarefs à surveiller
+    # Datarefs à surveiller - toutes vérifiées dans la documentation officielle
     DATAREF_PATHS = {
         "latitude": "sim/flightmodel/position/latitude",
         "longitude": "sim/flightmodel/position/longitude",
@@ -1031,16 +1230,77 @@ class XPlaneMonitor(BaseSimulatorMonitor):
     def _do_connect(self) -> bool:
         """
         Résout les IDs des datarefs et teste la connexion.
+        
+        Returns:
+            True si la connexion a réussi, False sinon
         """
         try:
+            import requests
+            # Résoudre les IDs des datarefs
             self._api.resolve_ids(self.DATAREF_PATHS)
             self._ids_resolved = True
-            # Test de connexion avec une dataref simple
-            self._api.get_float("latitude")
+            
+            # Test de connexion avec une dataref simple pour vérifier que X-Plane répond
+            # On utilise latitude car c'est une dataref toujours disponible
+            test_value = self._api.get_float("latitude")
+            # Vérifier que la valeur est raisonnable (latitude entre -90 et 90)
+            if not (-90 <= test_value <= 90):
+                # La valeur n'est pas valide, mais la connexion a fonctionné
+                # On considère que c'est OK (peut-être en pause ou autre situation)
+                pass
+            
             return True
-        except ImportError:
+            
+        except ImportError as e:
+            self._last_error_id = "REQUESTS_NOT_INSTALLED"
+            self._last_error_args = None
             return False
-        except Exception:
+        except requests.exceptions.ConnectionError as e:
+            # Erreur de connexion (X-Plane non démarré, mauvais port, etc.)
+            error_str = str(e)
+            if "Incoming Traffic" in error_str or "403" in error_str:
+                self._last_error_id = "XPLANE_INCOMING_TRAFFIC_DISABLED"
+                self._last_error_args = {"host": self.host, "port": self.port}
+            else:
+                self._last_error_id = "XPLANE_NOT_RUNNING"
+                self._last_error_args = {"host": self.host, "port": self.port, "error": error_str}
+            return False
+        except requests.exceptions.Timeout as e:
+            self._last_error_id = "XPLANE_API_TIMEOUT"
+            self._last_error_args = {"host": self.host, "port": self.port}
+            return False
+        except requests.exceptions.HTTPError as e:
+            # Erreur HTTP (403, 404, etc.)
+            if e.response and e.response.status_code == 403:
+                self._last_error_id = "XPLANE_INCOMING_TRAFFIC_DISABLED"
+                self._last_error_args = {"host": self.host, "port": self.port}
+            elif e.response and e.response.status_code == 404:
+                self._last_error_id = "XPLANE_WRONG_ENDPOINT"
+                self._last_error_args = {"host": self.host, "port": self.port}
+            else:
+                self._last_error_id = "XPLANE_HTTP_ERROR"
+                self._last_error_args = {"host": self.host, "port": self.port, "status": e.response.status_code if e.response else "unknown"}
+            return False
+        except requests.exceptions.RequestException as e:
+            self._last_error_id = "XPLANE_NETWORK_ERROR"
+            self._last_error_args = {"host": self.host, "port": self.port, "error": str(e)}
+            return False
+        except ValueError as e:
+            # Erreur de dataref introuvable ou format invalide
+            error_str = str(e)
+            if "DATAREF_NOT_FOUND" in error_str or "not found" in error_str.lower():
+                self._last_error_id = "DATAREF_NOT_FOUND"
+                self._last_error_args = {"path": error_str}
+            elif "XPLANE_INVALID_API_RESPONSE_FORMAT" in error_str:
+                self._last_error_id = "XPLANE_INVALID_API_RESPONSE"
+                self._last_error_args = {"error": error_str}
+            else:
+                self._last_error_id = "XPLANE_API_ERROR"
+                self._last_error_args = {"error": error_str}
+            return False
+        except Exception as e:
+            self._last_error_id = "XPLANE_API_ERROR"
+            self._last_error_args = {"error": str(e)}
             return False
 
     def disconnect(self) -> None:

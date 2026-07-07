@@ -134,6 +134,14 @@ _FR_TRANSLATIONS: Dict[str, str] = {
     "ERROR_STOPPING_MONITORING": "Erreur lors de l'arrêt du monitoring : {error}",
     "ERROR_POLLING_DATA": "Erreur lors du sondage des données : {error}",
     "ERROR_UPDATING_DATA": "Erreur lors de la mise à jour de l'affichage des données : {error}",
+    "NOT_CONNECTED": "Non connecté",
+    "CONNECT_FIRST": "Veuillez vous connecter au simulateur d'abord.",
+    "CONNECTION_FAILED": "Échec de la connexion",
+    "XPLANE_NOT_RUNNING": "X-Plane n'est pas en cours d'exécution ou l'API REST n'est pas accessible sur {host}:{port}",
+    "XPLANE_API_TIMEOUT": "Timeout lors de la connexion à l'API X-Plane sur {host}:{port}",
+    "XPLANE_API_ERROR": "Erreur de l'API X-Plane: {error}",
+    "XPLANE_NETWORK_ERROR": "Erreur réseau lors de la connexion à X-Plane: {error}",
+    "REQUESTS_NOT_INSTALLED": "Module 'requests' non installé",
     
     # Boîte About
     "ABOUT_TITLE": "À propos de l'Enregistreur de Données de Vol",
@@ -257,6 +265,14 @@ _EN_TRANSLATIONS: Dict[str, str] = {
     "ERROR_STOPPING_MONITORING": "Error stopping monitoring: {error}",
     "ERROR_POLLING_DATA": "Error polling data: {error}",
     "ERROR_UPDATING_DATA": "Error updating data display: {error}",
+    "NOT_CONNECTED": "Not Connected",
+    "CONNECT_FIRST": "Please connect to the simulator first.",
+    "CONNECTION_FAILED": "Connection Failed",
+    "XPLANE_NOT_RUNNING": "X-Plane is not running or REST API is not accessible at {host}:{port}",
+    "XPLANE_API_TIMEOUT": "Timeout connecting to X-Plane API at {host}:{port}",
+    "XPLANE_API_ERROR": "X-Plane API error: {error}",
+    "XPLANE_NETWORK_ERROR": "Network error connecting to X-Plane: {error}",
+    "REQUESTS_NOT_INSTALLED": "'requests' module not installed",
     
     # Boîte About
     "ABOUT_TITLE": "About Flight Data Recorder",
