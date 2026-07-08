@@ -739,23 +739,21 @@ class BaseSimulatorMonitor(ABC):
 
     def stop_monitoring(self) -> None:
         """
-        Arrête la boucle de monitoring et ferme la connexion.
+        Arrête la boucle de monitoring.
+        Note: Ne ferme PAS la connexion au simulateur. Utilisez disconnect() pour ça.
         """
         self._running = False
         if self._monitor_thread:
             self._monitor_thread.join(timeout=5.0)
             self._monitor_thread = None
         
-        # Fermer la connexion proprement
-        self.disconnect()
-        
+        # Réinitialiser l'état de vol mais garder la connexion active
         with self._lock:
             self._flight_state = FlightState.WAITING
             self._data_history.clear()
-            self._connected = False
         
-        # Notifier via la queue
-        self._notify_connection_status(False, _("MONITORING_STOPPED"))
+        # Notifier que le monitoring est arrêté (mais la connexion reste active)
+        self._notify_connection_status(self.is_connected, _("MONITORING_STOPPED"))
 
     def _monitor_loop(self) -> None:
         """
@@ -832,10 +830,10 @@ class BaseSimulatorMonitor(ABC):
                 self._running = False
                 break
 
-        # Notification finale de déconnexion
-        if self.is_connected:
-            self.disconnect()
-        self._notify_connection_status(False, _("DISCONNECTED"))
+        # Notification finale - le monitoring s'est arrêté
+        # Note: On ne déconnecte PAS automatiquement, la connexion reste active
+        # L'utilisateur doit appeler disconnect() explicitement s'il veut se déconnecter
+        self._notify_connection_status(self.is_connected, _("MONITORING_STOPPED"))
 
 # ---------------------------------------------------------------------------
 # Moniteur MSFS (SimConnect)
