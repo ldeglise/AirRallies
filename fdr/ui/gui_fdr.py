@@ -349,10 +349,23 @@ class Ui_MainWindow(object):
 
         self.gridLayoutData.addWidget(self.labelHeadingValue, 2, 1, 1, 1)
 
+        self.labelHeadingMag = QLabel(self.groupBoxData)
+        self.labelHeadingMag.setObjectName(u"labelHeadingMag")
+
+        self.gridLayoutData.addWidget(self.labelHeadingMag, 2, 2, 1, 1)
+
+        self.labelHeadingMagValue = QLabel(self.groupBoxData)
+        self.labelHeadingMagValue.setObjectName(u"labelHeadingMagValue")
+        self.labelHeadingMagValue.setFrameShape(QFrame.Panel)
+        self.labelHeadingMagValue.setFrameShadow(QFrame.Sunken)
+        self.labelHeadingMagValue.setAlignment(Qt.AlignRight|Qt.AlignTrailing|Qt.AlignVCenter)
+
+        self.gridLayoutData.addWidget(self.labelHeadingMagValue, 2, 3, 1, 1)
+
         self.labelGroundSpeed = QLabel(self.groupBoxData)
         self.labelGroundSpeed.setObjectName(u"labelGroundSpeed")
 
-        self.gridLayoutData.addWidget(self.labelGroundSpeed, 2, 2, 1, 1)
+        self.gridLayoutData.addWidget(self.labelGroundSpeed, 3, 0, 1, 1)
 
         self.labelGroundSpeedValue = QLabel(self.groupBoxData)
         self.labelGroundSpeedValue.setObjectName(u"labelGroundSpeedValue")
@@ -360,12 +373,12 @@ class Ui_MainWindow(object):
         self.labelGroundSpeedValue.setFrameShadow(QFrame.Sunken)
         self.labelGroundSpeedValue.setAlignment(Qt.AlignRight|Qt.AlignTrailing|Qt.AlignVCenter)
 
-        self.gridLayoutData.addWidget(self.labelGroundSpeedValue, 2, 3, 1, 1)
+        self.gridLayoutData.addWidget(self.labelGroundSpeedValue, 3, 1, 1, 1)
 
         self.labelIndicatedSpeed = QLabel(self.groupBoxData)
         self.labelIndicatedSpeed.setObjectName(u"labelIndicatedSpeed")
 
-        self.gridLayoutData.addWidget(self.labelIndicatedSpeed, 3, 0, 1, 1)
+        self.gridLayoutData.addWidget(self.labelIndicatedSpeed, 3, 2, 1, 1)
 
         self.labelIndicatedSpeedValue = QLabel(self.groupBoxData)
         self.labelIndicatedSpeedValue.setObjectName(u"labelIndicatedSpeedValue")
@@ -373,12 +386,12 @@ class Ui_MainWindow(object):
         self.labelIndicatedSpeedValue.setFrameShadow(QFrame.Sunken)
         self.labelIndicatedSpeedValue.setAlignment(Qt.AlignRight|Qt.AlignTrailing|Qt.AlignVCenter)
 
-        self.gridLayoutData.addWidget(self.labelIndicatedSpeedValue, 3, 1, 1, 1)
+        self.gridLayoutData.addWidget(self.labelIndicatedSpeedValue, 3, 3, 1, 1)
 
         self.labelPower = QLabel(self.groupBoxData)
         self.labelPower.setObjectName(u"labelPower")
 
-        self.gridLayoutData.addWidget(self.labelPower, 3, 2, 1, 1)
+        self.gridLayoutData.addWidget(self.labelPower, 4, 0, 1, 1)
 
         self.labelPowerValue = QLabel(self.groupBoxData)
         self.labelPowerValue.setObjectName(u"labelPowerValue")
@@ -386,12 +399,12 @@ class Ui_MainWindow(object):
         self.labelPowerValue.setFrameShadow(QFrame.Sunken)
         self.labelPowerValue.setAlignment(Qt.AlignRight|Qt.AlignTrailing|Qt.AlignVCenter)
 
-        self.gridLayoutData.addWidget(self.labelPowerValue, 3, 3, 1, 1)
+        self.gridLayoutData.addWidget(self.labelPowerValue, 4, 1, 1, 1)
 
         self.labelSimTime = QLabel(self.groupBoxData)
         self.labelSimTime.setObjectName(u"labelSimTime")
 
-        self.gridLayoutData.addWidget(self.labelSimTime, 4, 0, 1, 1)
+        self.gridLayoutData.addWidget(self.labelSimTime, 5, 0, 1, 1)
 
         self.labelSimTimeValue = QLabel(self.groupBoxData)
         self.labelSimTimeValue.setObjectName(u"labelSimTimeValue")
@@ -399,7 +412,7 @@ class Ui_MainWindow(object):
         self.labelSimTimeValue.setFrameShadow(QFrame.Sunken)
         self.labelSimTimeValue.setAlignment(Qt.AlignRight|Qt.AlignTrailing|Qt.AlignVCenter)
 
-        self.gridLayoutData.addWidget(self.labelSimTimeValue, 4, 1, 1, 3)
+        self.gridLayoutData.addWidget(self.labelSimTimeValue, 5, 1, 1, 3)
 
 
         self.verticalLayout_3.addWidget(self.groupBoxData)
@@ -494,8 +507,10 @@ class Ui_MainWindow(object):
         self.labelAltitudeValue.setText(QCoreApplication.translate("MainWindow", u"N/A", None))
         self.labelAGL.setText(QCoreApplication.translate("MainWindow", u"Altitude (AGL):", None))
         self.labelAGLValue.setText(QCoreApplication.translate("MainWindow", u"N/A", None))
-        self.labelHeading.setText(QCoreApplication.translate("MainWindow", u"Heading:", None))
+        self.labelHeading.setText(QCoreApplication.translate("MainWindow", u"Heading (True):", None))
         self.labelHeadingValue.setText(QCoreApplication.translate("MainWindow", u"N/A", None))
+        self.labelHeadingMag.setText(QCoreApplication.translate("MainWindow", u"Heading (Mag):", None))
+        self.labelHeadingMagValue.setText(QCoreApplication.translate("MainWindow", u"N/A", None))
         self.labelGroundSpeed.setText(QCoreApplication.translate("MainWindow", u"Ground Speed:", None))
         self.labelGroundSpeedValue.setText(QCoreApplication.translate("MainWindow", u"N/A", None))
         self.labelIndicatedSpeed.setText(QCoreApplication.translate("MainWindow", u"Indicated Speed:", None))
