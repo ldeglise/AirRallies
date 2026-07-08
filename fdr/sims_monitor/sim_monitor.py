@@ -590,14 +590,13 @@ class BaseSimulatorMonitor(ABC):
         gs_kt = self._parse_gs_kt(data)
         alt_agl_ft = self._parse_alt_agl_ft(data)
         
-        # Si on ne peut pas extraire les données nécessaires, utiliser des valeurs par défaut
-        # pour ne pas bloquer la détection. En vol, on continue à enregistrer.
-        if gs_kt is None:
-            gs_kt = 0.0
-        if alt_agl_ft is None:
-            alt_agl_ft = 0.0
+        # Si les données nécessaires sont manquantes, on ne peut pas faire de détection fiable
+        # Si on est déjà en vol, continuer à enregistrer ce point
+        # Sinon, ignorer ce point (ne pas enregistrer et ne pas mettre à jour l'état)
+        if gs_kt is None or alt_agl_ft is None:
+            return self._flight_state == FlightState.IN_FLIGHT
         
-        # Ajouter à l'historique
+        # Ajouter à l'historique (seulement si les données sont valides)
         self._data_history.append((gs_kt, alt_agl_ft, now))
         
         # Nettoyer l'historique (garder seulement les données des dernières DETECTION_DURATION_SEC)
@@ -635,7 +634,7 @@ class BaseSimulatorMonitor(ABC):
     def _clean_old_history(self, now: datetime) -> None:
         """Nettoie l'historique des données trop anciennes."""
         cutoff = now - timedelta(seconds=self._detection_duration)
-        while self._data_history and self._data_history[0][2] < cutoff:
+        while self._data_history and self._data_history[0][2] <= cutoff:
             self._data_history.popleft()
 
     def _check_takeoff_condition(self) -> bool:
@@ -654,14 +653,19 @@ class BaseSimulatorMonitor(ABC):
         # Vérifier que TOUTES les entrées de l'historique remplissent les conditions
         # Pour le décollage: GS > seuil ET AGL > 0 (on rejette seulement si AGL <= -tolérance)
         for gs_kt, alt_agl_ft, _ in self._data_history:
+            # Si une valeur est None, la condition ne peut pas être remplie
+            if gs_kt is None or alt_agl_ft is None:
+                return False
             if gs_kt <= self.TAKEOFF_GS_THRESHOLD_KT or alt_agl_ft <= self.TAKEOFF_AGL_THRESHOLD_FT - agl_tolerance_ft:
                 return False
         
         # Vérifier que la durée couverte par l'historique est >= DETECTION_DURATION_SEC
+        # Utiliser une tolérance pour gérer les imprécisions de timestamp
+        # (avec un intervalle de 1s, la durée sera légèrement inférieure à cause du nettoyage)
         first_time = self._data_history[0][2]
         last_time = self._data_history[-1][2]
         duration = (last_time - first_time).total_seconds()
-        return duration >= self._detection_duration
+        return duration >= self._detection_duration - 1.0  # tolérance de 1s
 
     def _check_landing_condition(self) -> bool:
         """
@@ -679,14 +683,19 @@ class BaseSimulatorMonitor(ABC):
         # Vérifier que TOUTES les entrées de l'historique remplissent les conditions
         # Pour l'atterrissage: GS <= seuil ET AGL ≈ 0 (abs(AGL) <= tolérance)
         for gs_kt, alt_agl_ft, _ in self._data_history:
+            # Si une valeur est None, la condition ne peut pas être remplie
+            if gs_kt is None or alt_agl_ft is None:
+                return False
             if gs_kt > self.LANDING_GS_THRESHOLD_KT or abs(alt_agl_ft) > agl_tolerance_ft:
                 return False
         
         # Vérifier que la durée couverte par l'historique est >= DETECTION_DURATION_SEC
+        # Utiliser une tolérance pour gérer les imprécisions de timestamp
+        # (avec un intervalle de 1s, la durée sera légèrement inférieure à cause du nettoyage)
         first_time = self._data_history[0][2]
         last_time = self._data_history[-1][2]
         duration = (last_time - first_time).total_seconds()
-        return duration >= self._detection_duration
+        return duration >= self._detection_duration - 1.0  # tolérance de 1s
 
     def _notify_connection_status(self, connected: bool, message: str) -> None:
         """
@@ -782,7 +791,8 @@ class BaseSimulatorMonitor(ABC):
                 # Connexion réussie, notifier
                 self._notify_connection_status(True, _("CONNECTED_WAITING_TAKEOFF"))
             else:
-                # Mode manuel : impossible de démarrer sans connexion
+                # Mode manuel : vérifier si la connexion est déjà établie
+                # Si pas de connexion, impossible de démarrer le monitoring
                 self._notify_connection_status(False, _("MONITORING_REQUIRES_CONNECTION"))
                 self._running = False
                 return
@@ -893,49 +903,105 @@ class MSFSMonitor(BaseSimulatorMonitor):
             self._aq = None
 
     def get_data(self) -> dict:
-        """Récupère les données MSFS."""
+        """Récupère les données MSFS.
+        
+        Retourne toujours un dictionnaire avec toutes les clés, même en cas d'erreur
+        sur une SimVar individuelle. Cela garantit que le parsing ultérieur ne
+        échouera pas à cause de clés manquantes.
+        """
         if not self._aq:
             return {}
 
-        s = {}
+        # Initialiser toutes les clés avec des valeurs par défaut
+        s = {
+            "latitude": "—", "longitude": "—", "sim_time": "—",
+            "alt_msl": "—", "alt_agl": "—",
+            "heading_true": "—", "heading_mag": "—",
+            "ias": "—", "gs": "—",
+            "power": "—",
+            "acf_icao": "—", "acf_name": "—",
+            "error": None
+        }
 
         try:
-            # Position
-            lat = self._aq.get("PLANE LATITUDE")
-            lon = self._aq.get("PLANE LONGITUDE")
-            s["latitude"] = f"{float(lat):.6f} °" if lat is not None else "—"
-            s["longitude"] = f"{float(lon):.6f} °" if lon is not None else "—"
+            # Position - chaque SimVar est récupérée indépendamment
+            try:
+                lat = self._aq.get("PLANE LATITUDE")
+                s["latitude"] = f"{float(lat):.6f} °" if lat is not None else "—"
+            except Exception:
+                pass
+
+            try:
+                lon = self._aq.get("PLANE LONGITUDE")
+                s["longitude"] = f"{float(lon):.6f} °" if lon is not None else "—"
+            except Exception:
+                pass
 
             # Temps (ABSOLUTE TIME = secondes depuis J2000 epoch)
-            abs_t = self._aq.get("ABSOLUTE TIME")
-            s["sim_time"] = self._absolute_time_to_iso(abs_t) if abs_t is not None else "—"
+            try:
+                abs_t = self._aq.get("ABSOLUTE TIME")
+                s["sim_time"] = self._absolute_time_to_iso(abs_t) if abs_t is not None else "—"
+            except Exception:
+                pass
 
             # Altitudes
-            alt_msl = self._aq.get("INDICATED ALTITUDE")
-            alt_agl = self._aq.get("PLANE ALT ABOVE GROUND")
-            s["alt_msl"] = f"{float(alt_msl):,.0f} ft" if alt_msl is not None else "—"
-            s["alt_agl"] = f"{float(alt_agl):,.0f} ft" if alt_agl is not None else "—"
+            try:
+                alt_msl = self._aq.get("INDICATED ALTITUDE")
+                s["alt_msl"] = f"{float(alt_msl):,.0f} ft" if alt_msl is not None else "—"
+            except Exception:
+                pass
+
+            try:
+                alt_agl = self._aq.get("PLANE ALT ABOVE GROUND")
+                s["alt_agl"] = f"{float(alt_agl):,.0f} ft" if alt_agl is not None else "—"
+            except Exception:
+                pass
 
             # Caps
-            hdg_true = self._aq.get("PLANE HEADING DEGREES TRUE")
-            hdg_mag = self._aq.get("PLANE HEADING DEGREES MAGNETIC")
-            s["heading_true"] = f"{float(hdg_true):.1f} °" if hdg_true is not None else "—"
-            s["heading_mag"] = f"{float(hdg_mag):.1f} °" if hdg_mag is not None else "—"
+            try:
+                hdg_true = self._aq.get("PLANE HEADING DEGREES TRUE")
+                s["heading_true"] = f"{float(hdg_true):.1f} °" if hdg_true is not None else "—"
+            except Exception:
+                pass
+
+            try:
+                hdg_mag = self._aq.get("PLANE HEADING DEGREES MAGNETIC")
+                s["heading_mag"] = f"{float(hdg_mag):.1f} °" if hdg_mag is not None else "—"
+            except Exception:
+                pass
 
             # Vitesse
-            ias = self._aq.get("AIRSPEED INDICATED")
-            gs = self._aq.get("GROUND VELOCITY")
-            s["ias"] = f"{float(ias):.1f} kt" if ias is not None else "—"
-            s["gs"] = f"{float(gs):.1f} kt" if gs is not None else "—"
+            try:
+                ias = self._aq.get("AIRSPEED INDICATED")
+                s["ias"] = f"{float(ias):.1f} kt" if ias is not None else "—"
+            except Exception:
+                pass
+
+            try:
+                gs = self._aq.get("GROUND VELOCITY")
+                s["gs"] = f"{float(gs):.1f} kt" if gs is not None else "—"
+            except Exception:
+                pass
 
             # Puissance moteur (GENERAL ENG BRAKE POWER:N en ft-lb/s → HP)
-            s["power"] = f"{self._get_engine_power_hp():.0f} hp"
+            try:
+                power_hp = self._get_engine_power_hp()
+                s["power"] = f"{power_hp:.0f} hp"
+            except Exception:
+                pass
 
             # Appareil
-            acf_type = self._aq.get("ATC TYPE")
-            acf_title = self._aq.get("TITLE")
-            s["acf_icao"] = str(acf_type).strip() if acf_type else "—"
-            s["acf_name"] = str(acf_title).strip() if acf_title else "—"
+            try:
+                acf_type = self._aq.get("ATC TYPE")
+                s["acf_icao"] = str(acf_type).strip() if acf_type else "—"
+            except Exception:
+                pass
+
+            try:
+                acf_title = self._aq.get("TITLE")
+                s["acf_name"] = str(acf_title).strip() if acf_title else "—"
+            except Exception:
+                pass
 
         except Exception as e:
             s["error"] = str(e)
@@ -1357,44 +1423,121 @@ class XPlaneMonitor(BaseSimulatorMonitor):
         self._ids_resolved = False
 
     def get_data(self) -> dict:
-        """Récupère les données X-Plane."""
+        """Récupère les données X-Plane.
+        
+        Retourne toujours un dictionnaire avec toutes les clés, même en cas d'erreur
+        sur une dataref individuelle. Cela garantit que le parsing ultérieur ne
+        échouera pas à cause de clés manquantes.
+        """
         if not self._ids_resolved:
             return {}
 
-        s = {}
+        # Initialiser toutes les clés avec des valeurs par défaut
+        s = {
+            "latitude": "—", "longitude": "—", "sim_time": "—",
+            "alt_msl": "—", "alt_agl": "—",
+            "heading_true": "—", "heading_mag": "—",
+            "ias": "—", "gs": "—",
+            "power": "—",
+            "acf_icao": "—", "acf_name": "—",
+            "error": None
+        }
 
         try:
-            # Position
-            s["latitude"] = f"{self._api.get_float('latitude'):.6f} °"
-            s["longitude"] = f"{self._api.get_float('longitude'):.6f} °"
+            # Position - chaque dataref est récupérée indépendamment
+            try:
+                lat = self._api.get_float('latitude')
+                if lat is not None:
+                    s["latitude"] = f"{lat:.6f} °"
+            except Exception:
+                pass
+
+            try:
+                lon = self._api.get_float('longitude')
+                if lon is not None:
+                    s["longitude"] = f"{lon:.6f} °"
+            except Exception:
+                pass
 
             # Temps
-            zulu = self._api.get_float("zulu_sec")
-            days = self._api.get_float("date_days")
-            s["sim_time"] = self._build_iso(zulu, days)
+            try:
+                zulu = self._api.get_float("zulu_sec")
+                days = self._api.get_float("date_days")
+                if zulu is not None and days is not None:
+                    s["sim_time"] = self._build_iso(zulu, days)
+            except Exception:
+                pass
 
             # Altitudes (conversion m → ft)
-            s["alt_msl"] = f"{self._api.get_float('alt_msl_m') * M_TO_FT:,.0f} ft"
-            s["alt_agl"] = f"{self._api.get_float('alt_agl_m') * M_TO_FT:,.0f} ft"
+            try:
+                alt_msl = self._api.get_float('alt_msl_m')
+                if alt_msl is not None:
+                    s["alt_msl"] = f"{alt_msl * M_TO_FT:,.0f} ft"
+            except Exception:
+                pass
+
+            try:
+                alt_agl = self._api.get_float('alt_agl_m')
+                if alt_agl is not None:
+                    s["alt_agl"] = f"{alt_agl * M_TO_FT:,.0f} ft"
+            except Exception:
+                pass
 
             # Caps
-            s["heading_true"] = f"{self._api.get_float('heading_true'):.1f} °"
-            s["heading_mag"] = f"{self._api.get_float('heading_mag'):.1f} °"
+            try:
+                hdg_true = self._api.get_float('heading_true')
+                if hdg_true is not None:
+                    s["heading_true"] = f"{hdg_true:.1f} °"
+            except Exception:
+                pass
+
+            try:
+                hdg_mag = self._api.get_float('heading_mag')
+                if hdg_mag is not None:
+                    s["heading_mag"] = f"{hdg_mag:.1f} °"
+            except Exception:
+                pass
 
             # Vitesse
             # Note: sim/flightmodel/position/indicated_airspeed retourne déjà des knots (pas m/s)
             # selon la documentation officielle X-Plane
             # sim/flightmodel/position/groundspeed retourne des m/s
-            s["ias"] = f"{self._api.get_float('ias_mps'):.1f} kt"
-            s["gs"] = f"{self._api.get_float('gs_mps') * MPS_TO_KT:.1f} kt"
+            try:
+                ias = self._api.get_float('ias_mps')
+                if ias is not None:
+                    s["ias"] = f"{ias:.1f} kt"
+            except Exception:
+                pass
+
+            try:
+                gs_mps = self._api.get_float('gs_mps')
+                if gs_mps is not None:
+                    s["gs"] = f"{gs_mps * MPS_TO_KT:.1f} kt"
+            except Exception:
+                pass
 
             # Puissance (conversion W → HP)
-            power_arr = self._api.get_float_array("engine_power_w")
-            s["power"] = f"{sum(power_arr) * W_TO_HP:.0f} hp"
+            try:
+                power_arr = self._api.get_float_array("engine_power_w")
+                if power_arr:
+                    s["power"] = f"{sum(power_arr) * W_TO_HP:.0f} hp"
+            except Exception:
+                pass
 
             # Appareil
-            s["acf_icao"] = self._api.get_string("acf_icao")
-            s["acf_name"] = self._api.get_string("acf_name")
+            try:
+                acf_icao = self._api.get_string("acf_icao")
+                if acf_icao:
+                    s["acf_icao"] = acf_icao
+            except Exception:
+                pass
+
+            try:
+                acf_name = self._api.get_string("acf_name")
+                if acf_name:
+                    s["acf_name"] = acf_name
+            except Exception:
+                pass
 
         except Exception as e:
             s["error"] = str(e)
