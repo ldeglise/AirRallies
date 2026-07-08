@@ -70,6 +70,7 @@ Auteurs : Adapté des moniteurs originaux MSFS et X-Plane
 
 import json
 import os
+import queue
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -420,6 +421,9 @@ class BaseSimulatorMonitor(ABC):
         self._last_error_id: Optional[str] = None
         self._last_error_args: Optional[dict] = None
         
+        # Queue thread-safe pour les messages de statut (évite les erreurs Qt de threading)
+        self._status_queue = queue.Queue(maxsize=100)
+        
         # État de vol pour détection décollage/atterrissage
         self._flight_state = FlightState.WAITING
         
@@ -448,16 +452,21 @@ class BaseSimulatorMonitor(ABC):
         Returns:
             True si la connexion a réussi, False sinon
         """
+        # Fermer l'ancienne connexion si elle existe
+        if self._connected:
+            self.disconnect()
+        
         result = self._do_connect()
-        if result:
-            self._last_error_id = None
-            self._last_error_args = None
-            self._notify_connection_status(True, _("CONNECTED"))
-        else:
-            # en cas d'erreur, notifier avec un message générique
-            # (les implémentations peuvent fournir plus de détails via _do_connect)
-            error_msg = self._format_error_message() or _("CONNECTION_FAILED")
-            self._notify_connection_status(False, error_msg)
+        with self._lock:
+            self._connected = result
+            if result:
+                self._last_error_id = None
+                self._last_error_args = None
+        
+        # Notifier via la queue (thread-safe)
+        msg = _("CONNECTED") if result else (self._format_error_message() or _("CONNECTION_FAILED"))
+        self._notify_connection_status(result, msg)
+        
         return result
     
     def get_last_error_id(self) -> Optional[str]:
@@ -674,16 +683,37 @@ class BaseSimulatorMonitor(ABC):
 
     def _notify_connection_status(self, connected: bool, message: str) -> None:
         """
-        Notifie le callback de changement de statut de connexion.
-        Thread-safe.
+        Notifie le changement de statut de connexion.
+        Thread-safe : les messages sont stockés dans une queue pour être traités
+        par le thread UI, évitant ainsi les erreurs Qt de threading.
         """
+        # Mettre à jour l'état de connexion
         with self._lock:
             self._connected = connected
-            if self._connection_callback:
-                try:
-                    self._connection_callback(connected, message)
-                except Exception:
-                    pass  # Ne pas propager les erreurs du callback
+        
+        # Stocker le message dans la queue thread-safe
+        try:
+            self._status_queue.put_nowait((connected, message))
+        except queue.Full:
+            # Si la queue est pleine, ignorer le message
+            pass
+
+    def get_status_messages(self) -> list[tuple[bool, str]]:
+        """
+        Récupère tous les messages de statut en attente.
+        À appeler depuis le thread UI (par exemple dans un timer) pour traiter
+        les messages de manière thread-safe.
+        
+        Returns:
+            Liste de tuples (is_connected: bool, message: str)
+        """
+        messages = []
+        try:
+            while True:
+                messages.append(self._status_queue.get_nowait())
+        except queue.Empty:
+            pass
+        return messages
 
     def start_monitoring(self) -> None:
         """
@@ -715,9 +745,16 @@ class BaseSimulatorMonitor(ABC):
         if self._monitor_thread:
             self._monitor_thread.join(timeout=5.0)
             self._monitor_thread = None
+        
+        # Fermer la connexion proprement
         self.disconnect()
-        self._flight_state = FlightState.WAITING
-        self._data_history.clear()
+        
+        with self._lock:
+            self._flight_state = FlightState.WAITING
+            self._data_history.clear()
+            self._connected = False
+        
+        # Notifier via la queue
         self._notify_connection_status(False, _("MONITORING_STOPPED"))
 
     def _monitor_loop(self) -> None:
@@ -729,56 +766,55 @@ class BaseSimulatorMonitor(ABC):
         """
         from .translations import gettext as _
         
-        # Tentative de connexion initiale (uniquement en mode automatique)
-        if self._auto_connect:
-            if not self._do_connect():
-                self._notify_connection_status(
-                    False,
-                    _("INITIAL_CONNECTION_FAILED")
-                )
+        # === Vérification initiale de la connexion ===
+        if not self.is_connected:
+            if self._auto_connect:
+                # Mode automatique : essayer de se connecter
+                if not self.connect():
+                    self._notify_connection_status(False, _("INITIAL_CONNECTION_FAILED"))
+                    self._running = False
+                    return
+                # Connexion réussie, notifier
+                self._notify_connection_status(True, _("CONNECTED_WAITING_TAKEOFF"))
+            else:
+                # Mode manuel : impossible de démarrer sans connexion
+                self._notify_connection_status(False, _("MONITORING_REQUIRES_CONNECTION"))
                 self._running = False
                 return
-            self._notify_connection_status(True, _("CONNECTED_WAITING_TAKEOFF"))
-        else:
-            # Mode manuel : notifier qu'on attend une connexion manuelle
-            self._notify_connection_status(False, _("WAITING_MANUAL_CONNECTION"))
 
-        # Boucle de polling
+        # === Boucle principale de polling ===
         while self._running:
             try:
-                # Si pas connecté, gérer selon le mode
-                if not self._connected:
-                    if self._auto_connect:
-                        # En mode automatique, réessayer la connexion
-                        if not self._do_connect():
-                            # Attendre avant de réessayer
-                            for i in range(int(self.poll_interval * 10)):
-                                if not self._running:
-                                    break
-                                time.sleep(0.1)
-                            continue
-                        self._notify_connection_status(True, _("RECONNECTED"))
-                    else:
-                        # En mode manuel, skipper ce cycle
-                        for i in range(int(self.poll_interval * 10)):
-                            if not self._running:
-                                break
-                            time.sleep(0.1)
-                        continue
+                # Vérifier que la connexion est toujours active
+                if not self.is_connected:
+                    # Connection perdue - nettoyer et arrêter
+                    self.disconnect()
+                    self._notify_connection_status(False, _("CONNECTION_LOST"))
+                    self._running = False
+                    break
                 
+                # Récupérer les données
                 data = self.get_data()
-                if data:
-                    # Vérifier si on doit enregistrer ce point (selon état de vol)
-                    should_record = self._update_flight_state(data)
-                    
-                    if should_record:
-                        # Enregistrer dans GeoJSON
-                        self.geojson_writer.add_point(data)
-                    
-                    # Si atterrissage détecté, on peut s'arrêter automatiquement
-                    if self._flight_state == FlightState.LANDED:
-                        self._running = False
-                        break
+                if not data:
+                    # Aucune donnée reçue - possible perte de connexion
+                    # Attendre et réessayer
+                    for i in range(int(self.poll_interval * 10)):
+                        if not self._running:
+                            break
+                        time.sleep(0.1)
+                    continue
+                
+                # Vérifier si on doit enregistrer ce point (selon état de vol)
+                should_record = self._update_flight_state(data)
+                
+                if should_record:
+                    # Enregistrer dans GeoJSON
+                    self.geojson_writer.add_point(data)
+                
+                # Si atterrissage détecté, s'arrêter automatiquement
+                if self._flight_state == FlightState.LANDED:
+                    self._running = False
+                    break
                 
                 # Attendre l'intervalle de polling
                 for i in range(int(self.poll_interval * 10)):
@@ -787,13 +823,18 @@ class BaseSimulatorMonitor(ABC):
                     time.sleep(0.1)
                     
             except Exception as e:
-                self._notify_connection_status(
-                    False,
-                    _("DATA_RETRIEVAL_ERROR", error=str(e))
-                )
+                # Erreur pendant la récupération des données
+                self.disconnect()
+                with self._lock:
+                    self._last_error_id = "DATA_RETRIEVAL_ERROR"
+                    self._last_error_args = {"error": str(e)}
+                self._notify_connection_status(False, _("DATA_RETRIEVAL_ERROR", error=str(e)))
                 self._running = False
                 break
 
+        # Notification finale de déconnexion
+        if self.is_connected:
+            self.disconnect()
         self._notify_connection_status(False, _("DISCONNECTED"))
 
 # ---------------------------------------------------------------------------

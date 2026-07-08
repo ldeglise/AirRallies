@@ -165,6 +165,11 @@ class MainWindow(QMainWindow):
         # Connect signals
         self._connect_signals()
         
+        # Setup status message timer (to process messages from monitor queue)
+        self.status_timer = QTimer(self)
+        self.status_timer.timeout.connect(self._process_status_messages)
+        self.status_timer.start(100)  # Check for status messages 10 times per second
+        
         # Set initial state
         self._update_ui_state()
         
@@ -473,8 +478,11 @@ class MainWindow(QMainWindow):
                 auto_connect=False  # We'll handle connection manually
             )
             
-            # Set up connection callback
-            monitor.set_connection_callback(self.on_connection_status_changed)
+            # NOTE: We no longer use set_connection_callback to avoid Qt thread issues.
+            # The monitor now uses a thread-safe queue for status messages, and we
+            # process them in the UI thread via _process_status_messages() method called
+            # by the status_timer. This prevents "QObject: Cannot create children for a
+            # parent that is in a different thread" errors.
             
             self.monitor = monitor
             self.log_message(_("MONITOR_CREATED", sim_type=sim_type))
@@ -486,8 +494,39 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, _("ERROR_NO_OUTPUT_FILE"), _("FAILED_CREATE_MONITOR", error=str(e)))
             return None
     
+    def _process_status_messages(self):
+        """Process status messages from monitor queue in UI thread."""
+        if not self.monitor:
+            return
+        
+        # Get all pending status messages from the monitor's thread-safe queue
+        messages = self.monitor.get_status_messages()
+        
+        for is_connected, message in messages:
+            # Update connection status label
+            if is_connected:
+                self.ui.labelConnectionStatus.setText(_("CONNECTION_CONNECTED"))
+                palette = self.ui.labelConnectionStatus.palette()
+                palette.setColor(QPalette.ColorRole.WindowText, QColor("green"))
+            else:
+                self.ui.labelConnectionStatus.setText(_("CONNECTION_DISCONNECTED"))
+                palette = self.ui.labelConnectionStatus.palette()
+                palette.setColor(QPalette.ColorRole.WindowText, QColor("red"))
+            self.ui.labelConnectionStatus.setPalette(palette)
+            
+            # Log message
+            self.log_message(message)
+            
+            # Update button states
+            self._update_ui_state()
+    
     def cleanup_monitor(self):
         """Clean up existing monitor and poller."""
+        # Stop status timer
+        if hasattr(self, 'status_timer') and self.status_timer:
+            self.status_timer.stop()
+            self.status_timer = None
+        
         # Stop poller
         if self.poller:
             self.poller.stop()
@@ -506,24 +545,27 @@ class MainWindow(QMainWindow):
             self.poll_thread.wait()
             self.poll_thread = None
     
-    def on_connection_status_changed(self, connected, message):
-        """Callback for monitor connection status changes."""
-        # Update connection status label
-        self.ui.labelConnectionStatus.setText(_("CONNECTION_CONNECTED") if connected else _("CONNECTION_DISCONNECTED"))
-        
-        # Set color
-        palette = self.ui.labelConnectionStatus.palette()
-        if connected:
-            palette.setColor(QPalette.ColorRole.WindowText, QColor("green"))
-        else:
-            palette.setColor(QPalette.ColorRole.WindowText, QColor("red"))
-        self.ui.labelConnectionStatus.setPalette(palette)
-        
-        # Log message
-        self.log_message(message)
-        
-        # Update button states
-        self._update_ui_state()
+    # NOTE: This method is no longer used. Connection status is now handled via
+    # _process_status_messages() which processes messages from the thread-safe queue.
+    # Keeping it here for reference but it's not connected to anything.
+    # def on_connection_status_changed(self, connected, message):
+    #     """Callback for monitor connection status changes."""
+    #     # Update connection status label
+    #     self.ui.labelConnectionStatus.setText(_("CONNECTION_CONNECTED") if connected else _("CONNECTION_DISCONNECTED"))
+    #     
+    #     # Set color
+    #     palette = self.ui.labelConnectionStatus.palette()
+    #     if connected:
+    #         palette.setColor(QPalette.ColorRole.WindowText, QColor("green"))
+    #     else:
+    #         palette.setColor(QPalette.ColorRole.WindowText, QColor("red"))
+    #     self.ui.labelConnectionStatus.setPalette(palette)
+    #     
+    #     # Log message
+    #     self.log_message(message)
+    #     
+    #     # Update button states
+    #     self._update_ui_state()
     
     def on_connect(self):
         """Handle Connect button click."""
