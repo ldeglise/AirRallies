@@ -297,7 +297,9 @@ class MainWindow(QMainWindow):
         self.ui.labelLongitude.setText(_("LONGITUDE"))
         self.ui.labelAltitude.setText(_("ALTITUDE_MSL"))
         self.ui.labelAGL.setText(_("ALTITUDE_AGL"))
-        self.ui.labelHeading.setText(_("HEADING"))
+        self.ui.labelHeading.setText(_("HEADING_TRUE"))
+        if hasattr(self.ui, 'labelHeadingMag'):
+            self.ui.labelHeadingMag.setText(_("HEADING_MAG"))
         self.ui.labelGroundSpeed.setText(_("GROUND_SPEED"))
         self.ui.labelIndicatedSpeed.setText(_("INDICATED_SPEED"))
         self.ui.labelPower.setText(_("POWER"))
@@ -316,12 +318,17 @@ class MainWindow(QMainWindow):
         for widget_name in ['labelAircraftICAOValue', 'labelAircraftNameValue',
                             'labelLatitudeValue', 'labelLongitudeValue',
                             'labelAltitudeValue', 'labelAGLValue',
-                            'labelHeadingValue', 'labelGroundSpeedValue',
+                            'labelHeadingValue',
+                            'labelGroundSpeedValue',
                             'labelIndicatedSpeedValue', 'labelPowerValue',
                             'labelSimTimeValue']:
             widget = getattr(self.ui, widget_name, None)
             if widget and widget.text() == "N/A":
                 widget.setText(na_text)
+        
+        # Update magnetic heading value if widget exists
+        if hasattr(self.ui, 'labelHeadingMagValue') and self.ui.labelHeadingMagValue.text() == "N/A":
+            self.ui.labelHeadingMagValue.setText(na_text)
         
         # Update initial log message
         self.ui.textBrowserLog.clear()
@@ -713,6 +720,8 @@ class MainWindow(QMainWindow):
                 self.ui.labelAGLValue.setText(str(data.get('alt_agl', na_text)))
             if 'heading_true' in data:
                 self.ui.labelHeadingValue.setText(str(data.get('heading_true', na_text)))
+            if 'heading_mag' in data and hasattr(self.ui, 'labelHeadingMagValue'):
+                self.ui.labelHeadingMagValue.setText(str(data.get('heading_mag', na_text)))
             if 'gs' in data:
                 self.ui.labelGroundSpeedValue.setText(str(data.get('gs', na_text)))
             if 'ias' in data:

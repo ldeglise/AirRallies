@@ -590,11 +590,12 @@ class BaseSimulatorMonitor(ABC):
         gs_kt = self._parse_gs_kt(data)
         alt_agl_ft = self._parse_alt_agl_ft(data)
         
-        # Si on ne peut pas extraire les données nécessaires, on garde l'état actuel
-        if gs_kt is None or alt_agl_ft is None:
-            # Nettoyer l'historique trop vieux
-            self._clean_old_history(now)
-            return self._flight_state == FlightState.IN_FLIGHT
+        # Si on ne peut pas extraire les données nécessaires, utiliser des valeurs par défaut
+        # pour ne pas bloquer la détection. En vol, on continue à enregistrer.
+        if gs_kt is None:
+            gs_kt = 0.0
+        if alt_agl_ft is None:
+            alt_agl_ft = 0.0
         
         # Ajouter à l'historique
         self._data_history.append((gs_kt, alt_agl_ft, now))
@@ -646,11 +647,14 @@ class BaseSimulatorMonitor(ABC):
             return False
         
         # Tolérance pour les comparaisons de flottants
-        agl_tolerance_ft = 1.0  # 1 pied de tolérance
+        # On utilise une tolérance négative pour éviter les faux rejets dus aux erreurs de précision
+        # Cela signifie qu'on accepte AGL > -0.1 pied (ce qui inclut toutes les valeurs positives)
+        agl_tolerance_ft = 0.1  # 0.1 pied de tolérance
         
         # Vérifier que TOUTES les entrées de l'historique remplissent les conditions
+        # Pour le décollage: GS > seuil ET AGL > 0 (on rejette seulement si AGL <= -tolérance)
         for gs_kt, alt_agl_ft, _ in self._data_history:
-            if gs_kt <= self.TAKEOFF_GS_THRESHOLD_KT or alt_agl_ft <= self.TAKEOFF_AGL_THRESHOLD_FT + agl_tolerance_ft:
+            if gs_kt <= self.TAKEOFF_GS_THRESHOLD_KT or alt_agl_ft <= self.TAKEOFF_AGL_THRESHOLD_FT - agl_tolerance_ft:
                 return False
         
         # Vérifier que la durée couverte par l'historique est >= DETECTION_DURATION_SEC
@@ -662,15 +666,18 @@ class BaseSimulatorMonitor(ABC):
     def _check_landing_condition(self) -> bool:
         """
         Vérifie si les conditions d'atterrissage sont remplies:
-        GS <= 30kt ET altitude AGL = 0 pendant > 5 secondes.
+        GS <= 30kt ET altitude AGL ≈ 0 pendant > 5 secondes.
         """
         if len(self._data_history) < 2:
             return False
         
         # Tolérance pour les comparaisons de flottants
-        agl_tolerance_ft = 1.0  # 1 pied de tolérance
+        # Pour l'atterrissage, on accepte AGL proche de 0 (dans [-0.1, 0.5] pieds)
+        # Cela permet de gérer les petites variations au toucher des roues
+        agl_tolerance_ft = 0.5  # 0.5 pied de tolérance pour l'atterrissage
         
         # Vérifier que TOUTES les entrées de l'historique remplissent les conditions
+        # Pour l'atterrissage: GS <= seuil ET AGL ≈ 0 (abs(AGL) <= tolérance)
         for gs_kt, alt_agl_ft, _ in self._data_history:
             if gs_kt > self.LANDING_GS_THRESHOLD_KT or abs(alt_agl_ft) > agl_tolerance_ft:
                 return False
@@ -1374,8 +1381,11 @@ class XPlaneMonitor(BaseSimulatorMonitor):
             s["heading_true"] = f"{self._api.get_float('heading_true'):.1f} °"
             s["heading_mag"] = f"{self._api.get_float('heading_mag'):.1f} °"
 
-            # Vitesse (conversion m/s → kt)
-            s["ias"] = f"{self._api.get_float('ias_mps') * MPS_TO_KT:.1f} kt"
+            # Vitesse
+            # Note: sim/flightmodel/position/indicated_airspeed retourne déjà des knots (pas m/s)
+            # selon la documentation officielle X-Plane
+            # sim/flightmodel/position/groundspeed retourne des m/s
+            s["ias"] = f"{self._api.get_float('ias_mps'):.1f} kt"
             s["gs"] = f"{self._api.get_float('gs_mps') * MPS_TO_KT:.1f} kt"
 
             # Puissance (conversion W → HP)

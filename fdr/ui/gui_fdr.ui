@@ -539,7 +539,7 @@ p, li { white-space: pre-wrap; }
            <item row="2" column="0">
             <widget class="QLabel" name="labelHeading">
              <property name="text">
-              <string>Heading:</string>
+              <string>Heading (True):</string>
              </property>
             </widget>
            </item>
@@ -560,14 +560,14 @@ p, li { white-space: pre-wrap; }
             </widget>
            </item>
            <item row="2" column="2">
-            <widget class="QLabel" name="labelGroundSpeed">
+            <widget class="QLabel" name="labelHeadingMag">
              <property name="text">
-              <string>Ground Speed:</string>
+              <string>Heading (Mag):</string>
              </property>
             </widget>
            </item>
            <item row="2" column="3">
-            <widget class="QLabel" name="labelGroundSpeedValue">
+            <widget class="QLabel" name="labelHeadingMagValue">
              <property name="text">
               <string>N/A</string>
              </property>
@@ -583,14 +583,14 @@ p, li { white-space: pre-wrap; }
             </widget>
            </item>
            <item row="3" column="0">
-            <widget class="QLabel" name="labelIndicatedSpeed">
+            <widget class="QLabel" name="labelGroundSpeed">
              <property name="text">
-              <string>Indicated Speed:</string>
+              <string>Ground Speed:</string>
              </property>
             </widget>
            </item>
            <item row="3" column="1">
-            <widget class="QLabel" name="labelIndicatedSpeedValue">
+            <widget class="QLabel" name="labelGroundSpeedValue">
              <property name="text">
               <string>N/A</string>
              </property>
@@ -606,14 +606,14 @@ p, li { white-space: pre-wrap; }
             </widget>
            </item>
            <item row="3" column="2">
-            <widget class="QLabel" name="labelPower">
+            <widget class="QLabel" name="labelIndicatedSpeed">
              <property name="text">
-              <string>Power:</string>
+              <string>Indicated Speed:</string>
              </property>
             </widget>
            </item>
            <item row="3" column="3">
-            <widget class="QLabel" name="labelPowerValue">
+            <widget class="QLabel" name="labelIndicatedSpeedValue">
              <property name="text">
               <string>N/A</string>
              </property>
@@ -629,13 +629,36 @@ p, li { white-space: pre-wrap; }
             </widget>
            </item>
            <item row="4" column="0">
+            <widget class="QLabel" name="labelPower">
+             <property name="text">
+              <string>Power:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QLabel" name="labelPowerValue">
+             <property name="text">
+              <string>N/A</string>
+             </property>
+             <property name="frameShape">
+              <enum>QFrame::Panel</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Sunken</enum>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="0">
             <widget class="QLabel" name="labelSimTime">
              <property name="text">
               <string>Simulation Time:</string>
              </property>
             </widget>
            </item>
-           <item row="4" column="1" colspan="3">
+           <item row="5" column="1" colspan="3">
             <widget class="QLabel" name="labelSimTimeValue">
              <property name="text">
               <string>N/A</string>
