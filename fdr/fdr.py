@@ -151,9 +151,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         
-        # Set window icon before setupUi
-        # This ensures the icon is set before any UI loading
-        # Try Qt resource first, then fallback to file
+        # Set window icon first thing
         icon = QIcon(":/icons/icon.png")
         if icon.isNull():
             icon_file = os.path.join(os.path.dirname(__file__), "ui", "icons", "icon.png")
@@ -820,8 +818,21 @@ def main():
     app.setOrganizationName("AirRallies")
     app.setApplicationVersion(_("ABOUT_VERSION"))
     
+    # Load icon
+    icon = QIcon(":/icons/icon.png")
+    if icon.isNull():
+        icon_file = os.path.join(os.path.dirname(__file__), "ui", "icons", "icon.png")
+        if os.path.exists(icon_file):
+            icon = QIcon(icon_file)
+    
     # Create and show main window
     window = MainWindow()
+    
+    # Set icon on both app and window
+    if not icon.isNull():
+        app.setWindowIcon(icon)
+        window.setWindowIcon(icon)
+    
     window.show()
     
     # Run application
