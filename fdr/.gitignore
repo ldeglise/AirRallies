@@ -12,5 +12,5 @@ share/
 !requirements.txt
 
 # Qt resource files (generated from .qrc)
-ui/resources_rc.py
-ui/*.pyc
+# Note: resources_rc.py is committed to the repo for convenience
+# ui/*.pyc

@@ -151,6 +151,17 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         
+        # Set window icon before setupUi
+        # This ensures the icon is set before any UI loading
+        # Try Qt resource first, then fallback to file
+        icon = QIcon(":/icons/icon.png")
+        if icon.isNull():
+            icon_file = os.path.join(os.path.dirname(__file__), "ui", "icons", "icon.png")
+            if os.path.exists(icon_file):
+                icon = QIcon(icon_file)
+        if not icon.isNull():
+            self.setWindowIcon(icon)
+        
         # Initialize language detection and translations
         # This must be done BEFORE creating the UI
         self._init_translations()
@@ -158,13 +169,6 @@ class MainWindow(QMainWindow):
         # Initialize UI
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
-        
-        # Set window icon if not already set by UI file
-        # This provides a fallback when Qt resources are not available
-        if self.windowIcon().isNull():
-            icon_file = os.path.join(os.path.dirname(__file__), "ui", "icons", "icon.png")
-            if os.path.exists(icon_file):
-                self.setWindowIcon(QIcon(icon_file))
         
         # Setup additional UI properties
         self._setup_ui_extras()
@@ -815,18 +819,6 @@ def main():
     app.setApplicationName(_("FLIGHT_DATA_RECORDER_TITLE"))
     app.setOrganizationName("AirRallies")
     app.setApplicationVersion(_("ABOUT_VERSION"))
-    
-    # Set application icon
-    # Try to load from resources first, then fallback to file path
-    icon_path = ":/icons/icon.png"
-    app_icon = QIcon(icon_path)
-    if app_icon.isNull():
-        # Fallback: try to load from file path
-        icon_file = os.path.join(os.path.dirname(__file__), "ui", "icons", "icon.png")
-        if os.path.exists(icon_file):
-            app_icon = QIcon(icon_file)
-    if not app_icon.isNull():
-        app.setWindowIcon(app_icon)
     
     # Create and show main window
     window = MainWindow()
