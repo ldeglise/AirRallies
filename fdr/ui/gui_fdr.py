@@ -3,7 +3,7 @@
 ################################################################################
 ## Form generated from reading UI file 'gui_fdr.ui'
 ##
-## Created by: Qt User Interface Compiler version 6.11.1
+## Created by: Qt User Interface Compiler version 6.8.2
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
@@ -52,29 +52,29 @@ class Ui_MainWindow(object):
         self.labelSimulatorType = QLabel(self.groupBoxSimulator)
         self.labelSimulatorType.setObjectName(u"labelSimulatorType")
 
-        self.formLayoutSimulator.setWidget(0, QFormLayout.ItemRole.LabelRole, self.labelSimulatorType)
+        self.formLayoutSimulator.setWidget(0, QFormLayout.LabelRole, self.labelSimulatorType)
 
         self.comboSimulatorType = QComboBox(self.groupBoxSimulator)
         self.comboSimulatorType.addItem("")
         self.comboSimulatorType.addItem("")
         self.comboSimulatorType.setObjectName(u"comboSimulatorType")
 
-        self.formLayoutSimulator.setWidget(0, QFormLayout.ItemRole.FieldRole, self.comboSimulatorType)
+        self.formLayoutSimulator.setWidget(0, QFormLayout.FieldRole, self.comboSimulatorType)
 
         self.labelHost = QLabel(self.groupBoxSimulator)
         self.labelHost.setObjectName(u"labelHost")
 
-        self.formLayoutSimulator.setWidget(1, QFormLayout.ItemRole.LabelRole, self.labelHost)
+        self.formLayoutSimulator.setWidget(1, QFormLayout.LabelRole, self.labelHost)
 
         self.lineEditHost = QLineEdit(self.groupBoxSimulator)
         self.lineEditHost.setObjectName(u"lineEditHost")
 
-        self.formLayoutSimulator.setWidget(1, QFormLayout.ItemRole.FieldRole, self.lineEditHost)
+        self.formLayoutSimulator.setWidget(1, QFormLayout.FieldRole, self.lineEditHost)
 
         self.labelPort = QLabel(self.groupBoxSimulator)
         self.labelPort.setObjectName(u"labelPort")
 
-        self.formLayoutSimulator.setWidget(2, QFormLayout.ItemRole.LabelRole, self.labelPort)
+        self.formLayoutSimulator.setWidget(2, QFormLayout.LabelRole, self.labelPort)
 
         self.spinBoxPort = QSpinBox(self.groupBoxSimulator)
         self.spinBoxPort.setObjectName(u"spinBoxPort")
@@ -82,12 +82,12 @@ class Ui_MainWindow(object):
         self.spinBoxPort.setMaximum(65535)
         self.spinBoxPort.setValue(8086)
 
-        self.formLayoutSimulator.setWidget(2, QFormLayout.ItemRole.FieldRole, self.spinBoxPort)
+        self.formLayoutSimulator.setWidget(2, QFormLayout.FieldRole, self.spinBoxPort)
 
         self.labelPollInterval = QLabel(self.groupBoxSimulator)
         self.labelPollInterval.setObjectName(u"labelPollInterval")
 
-        self.formLayoutSimulator.setWidget(3, QFormLayout.ItemRole.LabelRole, self.labelPollInterval)
+        self.formLayoutSimulator.setWidget(3, QFormLayout.LabelRole, self.labelPollInterval)
 
         self.spinBoxPollInterval = QDoubleSpinBox(self.groupBoxSimulator)
         self.spinBoxPollInterval.setObjectName(u"spinBoxPollInterval")
@@ -97,7 +97,7 @@ class Ui_MainWindow(object):
         self.spinBoxPollInterval.setSingleStep(0.1)
         self.spinBoxPollInterval.setValue(1.0)
 
-        self.formLayoutSimulator.setWidget(3, QFormLayout.ItemRole.FieldRole, self.spinBoxPollInterval)
+        self.formLayoutSimulator.setWidget(3, QFormLayout.FieldRole, self.spinBoxPollInterval)
 
 
         self.horizontalLayout_4.addWidget(self.groupBoxSimulator)
@@ -109,7 +109,7 @@ class Ui_MainWindow(object):
         self.labelOutputFile = QLabel(self.groupBoxOutput)
         self.labelOutputFile.setObjectName(u"labelOutputFile")
 
-        self.formLayoutOutput.setWidget(0, QFormLayout.ItemRole.SpanningRole, self.labelOutputFile)
+        self.formLayoutOutput.setWidget(0, QFormLayout.SpanningRole, self.labelOutputFile)
 
         self.horizontalLayoutOutputFile = QHBoxLayout()
         self.horizontalLayoutOutputFile.setObjectName(u"horizontalLayoutOutputFile")
@@ -125,7 +125,7 @@ class Ui_MainWindow(object):
         self.horizontalLayoutOutputFile.addWidget(self.pushButtonBrowse)
 
 
-        self.formLayoutOutput.setLayout(1, QFormLayout.ItemRole.SpanningRole, self.horizontalLayoutOutputFile)
+        self.formLayoutOutput.setLayout(1, QFormLayout.SpanningRole, self.horizontalLayoutOutputFile)
 
 
         self.horizontalLayout_4.addWidget(self.groupBoxOutput)
@@ -256,26 +256,26 @@ class Ui_MainWindow(object):
         self.labelAircraftICAO = QLabel(self.groupBoxAircraft)
         self.labelAircraftICAO.setObjectName(u"labelAircraftICAO")
 
-        self.formLayoutAircraft.setWidget(0, QFormLayout.ItemRole.LabelRole, self.labelAircraftICAO)
+        self.formLayoutAircraft.setWidget(0, QFormLayout.LabelRole, self.labelAircraftICAO)
 
         self.labelAircraftICAOValue = QLabel(self.groupBoxAircraft)
         self.labelAircraftICAOValue.setObjectName(u"labelAircraftICAOValue")
         self.labelAircraftICAOValue.setFrameShape(QFrame.Panel)
         self.labelAircraftICAOValue.setFrameShadow(QFrame.Sunken)
 
-        self.formLayoutAircraft.setWidget(0, QFormLayout.ItemRole.FieldRole, self.labelAircraftICAOValue)
+        self.formLayoutAircraft.setWidget(0, QFormLayout.FieldRole, self.labelAircraftICAOValue)
 
         self.labelAircraftName = QLabel(self.groupBoxAircraft)
         self.labelAircraftName.setObjectName(u"labelAircraftName")
 
-        self.formLayoutAircraft.setWidget(1, QFormLayout.ItemRole.LabelRole, self.labelAircraftName)
+        self.formLayoutAircraft.setWidget(1, QFormLayout.LabelRole, self.labelAircraftName)
 
         self.labelAircraftNameValue = QLabel(self.groupBoxAircraft)
         self.labelAircraftNameValue.setObjectName(u"labelAircraftNameValue")
         self.labelAircraftNameValue.setFrameShape(QFrame.Panel)
         self.labelAircraftNameValue.setFrameShadow(QFrame.Sunken)
 
-        self.formLayoutAircraft.setWidget(1, QFormLayout.ItemRole.FieldRole, self.labelAircraftNameValue)
+        self.formLayoutAircraft.setWidget(1, QFormLayout.FieldRole, self.labelAircraftNameValue)
 
 
         self.verticalLayout_3.addWidget(self.groupBoxAircraft)

@@ -147,19 +147,13 @@ _FR_TRANSLATIONS: Dict[str, str] = {
     
     # Boîte About
     "ABOUT_TITLE": "À propos de l'Enregistreur de Données de Vol",
-    "ABOUT_VERSION": "Version 1.0.0",
+    "ABOUT_VERSION": "Version 0.0.5",
     "ABOUT_DESCRIPTION": "Un outil pour enregistrer les données de vol des simulateurs au format GeoJSON.",
     "ABOUT_SUPPORTED_SIMULATORS": "<b>Simulateurs supportés :</b>",
     "ABOUT_SIMULATOR_XPLANE": "X-Plane 12 (via API REST sur le port 8086)",
     "ABOUT_SIMULATOR_MSFS": "Microsoft Flight Simulator 2020/2024 (via SimConnect)",
     "ABOUT_SIMULATOR_P3D": "Prepar3D (via SimConnect)",
-    "ABOUT_FEATURES": "<b>Fonctionnalités :</b>",
-    "ABOUT_FEATURE_REALTIME": "Enregistrement des données de vol en temps réel",
-    "ABOUT_FEATURE_AUTO_DETECT": "Détection automatique du décollage et de l'atterrissage",
-    "ABOUT_FEATURE_GEOJSON": "Sortie GeoJSON (conforme RFC 7946)",
-    "ABOUT_FEATURE_TRAJECTORY": "Ligne de trajectoire LineString optionnelle pour visualisation dans QGIS",
-    "ABOUT_FEATURE_CONNECTION_MODES": "Modes de connexion manuel ou automatique",
-    "ABOUT_OUTPUT_DESC": "<b>Sortie :</b> Fichiers GeoJSON avec des fonctionnalités Point pour chaque échantillon de données, incluant éventuellement une fonctionnalité LineString pour la visualisation de la trajectoire.",
+    "ABOUT_LICENSE": "<b>Licence :</b> MIT",
     "ABOUT_AUTHOR": "<b>Auteur :</b> Équipe de Développement AirRallies",
 }
 
@@ -280,19 +274,13 @@ _EN_TRANSLATIONS: Dict[str, str] = {
     
     # Boîte About
     "ABOUT_TITLE": "About Flight Data Recorder",
-    "ABOUT_VERSION": "Version 1.0.0",
+    "ABOUT_VERSION": "Version 0.0.5",
     "ABOUT_DESCRIPTION": "A tool for recording flight data from flight simulators to GeoJSON format.",
     "ABOUT_SUPPORTED_SIMULATORS": "<b>Supported Simulators:</b>",
     "ABOUT_SIMULATOR_XPLANE": "X-Plane 12 (via REST API on port 8086)",
     "ABOUT_SIMULATOR_MSFS": "Microsoft Flight Simulator 2020/2024 (via SimConnect)",
     "ABOUT_SIMULATOR_P3D": "Prepar3D (via SimConnect)",
-    "ABOUT_FEATURES": "<b>Features:</b>",
-    "ABOUT_FEATURE_REALTIME": "Real-time flight data recording",
-    "ABOUT_FEATURE_AUTO_DETECT": "Auto-detection of takeoff and landing",
-    "ABOUT_FEATURE_GEOJSON": "GeoJSON output (RFC 7946 compliant)",
-    "ABOUT_FEATURE_TRAJECTORY": "Optional trajectory LineString for QGIS visualization",
-    "ABOUT_FEATURE_CONNECTION_MODES": "Manual or automatic connection modes",
-    "ABOUT_OUTPUT_DESC": "<b>Output:</b> GeoJSON files with Point features for each data sample, optionally including a LineString feature for trajectory visualization.",
+    "ABOUT_LICENSE": "<b>License:</b> MIT",
     "ABOUT_AUTHOR": "<b>Author:</b> AirRallies Development Team",
 }
 

@@ -777,15 +777,7 @@ class MainWindow(QMainWindow):
             <li>{_("ABOUT_SIMULATOR_MSFS")}</li>
             <li>{_("ABOUT_SIMULATOR_P3D")}</li>
         </ul>
-        <p>{_("ABOUT_FEATURES")}</p>
-        <ul>
-            <li>{_("ABOUT_FEATURE_REALTIME")}</li>
-            <li>{_("ABOUT_FEATURE_AUTO_DETECT")}</li>
-            <li>{_("ABOUT_FEATURE_GEOJSON")}</li>
-            <li>{_("ABOUT_FEATURE_TRAJECTORY")}</li>
-            <li>{_("ABOUT_FEATURE_CONNECTION_MODES")}</li>
-        </ul>
-        <p>{_("ABOUT_OUTPUT_DESC")}</p>
+        <p>{_("ABOUT_LICENSE")}</p>
         <p>{_("ABOUT_AUTHOR")}</p>
         """
         QMessageBox.about(self, _("ABOUT_TITLE"), about_text)
