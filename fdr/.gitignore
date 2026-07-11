@@ -10,3 +10,7 @@ share/
 
 # Garder requirements.txt
 !requirements.txt
+
+# Qt resource files (generated from .qrc)
+ui/resources_rc.py
+ui/*.pyc

@@ -27,11 +27,20 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QInputDialog
 )
-from PySide6.QtCore import QTimer, Qt, QThread, Signal, Slot, QObject
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import QTimer, Qt, QThread, Signal, Slot, QObject, QDir
+from PySide6.QtGui import QColor, QPalette, QIcon
 
 # Import the generated UI
 from ui.gui_fdr import Ui_MainWindow
+
+# Import the resources (generated from resources.qrc)
+# This import is optional - if resources_rc.py doesn't exist, we'll fall back to file-based icons
+try:
+    from ui import resources_rc
+except ImportError:
+    # resources_rc.py not found - this is expected during local development
+    # without running generate_resources.py first
+    resources_rc = None
 
 # Import the GUI translations
 from ui.translations import (
@@ -149,6 +158,13 @@ class MainWindow(QMainWindow):
         # Initialize UI
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
+        
+        # Set window icon if not already set by UI file
+        # This provides a fallback when Qt resources are not available
+        if self.windowIcon().isNull():
+            icon_file = os.path.join(os.path.dirname(__file__), "ui", "icons", "icon.png")
+            if os.path.exists(icon_file):
+                self.setWindowIcon(QIcon(icon_file))
         
         # Setup additional UI properties
         self._setup_ui_extras()
@@ -799,6 +815,18 @@ def main():
     app.setApplicationName(_("FLIGHT_DATA_RECORDER_TITLE"))
     app.setOrganizationName("AirRallies")
     app.setApplicationVersion(_("ABOUT_VERSION"))
+    
+    # Set application icon
+    # Try to load from resources first, then fallback to file path
+    icon_path = ":/icons/icon.png"
+    app_icon = QIcon(icon_path)
+    if app_icon.isNull():
+        # Fallback: try to load from file path
+        icon_file = os.path.join(os.path.dirname(__file__), "ui", "icons", "icon.png")
+        if os.path.exists(icon_file):
+            app_icon = QIcon(icon_file)
+    if not app_icon.isNull():
+        app.setWindowIcon(app_icon)
     
     # Create and show main window
     window = MainWindow()

@@ -35,13 +35,18 @@ jobs:
         working-directory: fdr
         run: |
           python -m pip install --upgrade pip
-          pip install PySide6 pyinstaller
+          pip install PySide6 pyinstaller pyside6
+
+      - name: Compile Qt resources
+        working-directory: fdr
+        run: |
+          pyside6-rcc -o ui/resources_rc.py ui/resources.qrc
 
       - name: Build with PyInstaller
         working-directory: fdr
         run: |
           rm -rf ./dist-linux
-          pyinstaller --onedir --name fdr --clean --distpath ./dist-linux --workpath ./build-linux --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --hidden-import shiboken6 fdr.py
+          pyinstaller --onedir --name fdr --clean --distpath ./dist-linux --workpath ./build-linux --icon=ui/icons/icon.png --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --hidden-import shiboken6 fdr.py
 
       - name: Run post-build script (Linux)
         working-directory: fdr
@@ -81,13 +86,18 @@ jobs:
         working-directory: fdr
         run: |
           python -m pip install --upgrade pip
-          pip install PySide6 pyinstaller
+          pip install PySide6 pyinstaller pyside6
+
+      - name: Compile Qt resources
+        working-directory: fdr
+        run: |
+          pyside6-rcc -o ui/resources_rc.py ui/resources.qrc
 
       - name: Build with PyInstaller
         working-directory: fdr
         run: |
           Remove-Item -Recurse -Force -Path "./dist-windows" -ErrorAction SilentlyContinue
-          pyinstaller --onedir --name fdr --clean --distpath ./dist-windows --workpath ./build-windows --windowed --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --hidden-import shiboken6 fdr.py
+          pyinstaller --onedir --name fdr --clean --distpath ./dist-windows --workpath ./build-windows --windowed --icon=ui/icons/icon.ico --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --hidden-import shiboken6 fdr.py
 
       - name: Run post-build script (Windows)
         working-directory: fdr
@@ -125,13 +135,18 @@ jobs:
         working-directory: fdr
         run: |
           python -m pip install --upgrade pip
-          pip install PySide6 pyinstaller
+          pip install PySide6 pyinstaller pyside6
+
+      - name: Compile Qt resources
+        working-directory: fdr
+        run: |
+          pyside6-rcc -o ui/resources_rc.py ui/resources.qrc
 
       - name: Build with PyInstaller
         working-directory: fdr
         run: |
           rm -rf ./dist-macos
-          pyinstaller --onedir --name fdr --clean --distpath ./dist-macos --workpath ./build-macos --windowed --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --hidden-import shiboken6 fdr.py
+          pyinstaller --onedir --name fdr --clean --distpath ./dist-macos --workpath ./build-macos --windowed --icon=ui/icons/icon.icns --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --hidden-import shiboken6 fdr.py
 
       - name: Create versioned archive
         working-directory: fdr
