@@ -56,7 +56,7 @@ _FR_TRANSLATIONS: Dict[str, str] = {
     "HOST": "Hôte :",
     "HOST_PLACEHOLDER": "Entrez l'adresse IP",
     "PORT": "Port :",
-    "POLL_INTERVAL": "Intervalle de sondage (s) :",
+    "POLL_INTERVAL": "Intervalle de mesure (s) :",
     
     # Onglet Main - Paramètres de Sortie
     "OUTPUT_SETTINGS": "Paramètres de Sortie",
@@ -134,7 +134,7 @@ _FR_TRANSLATIONS: Dict[str, str] = {
     "FAILED_START_MONITORING": "Échec du démarrage du monitoring : {error}",
     "MONITORING_STOPPED": "Monitoring arrêté",
     "ERROR_STOPPING_MONITORING": "Erreur lors de l'arrêt du monitoring : {error}",
-    "ERROR_POLLING_DATA": "Erreur lors du sondage des données : {error}",
+    "ERROR_POLLING_DATA": "Erreur lors de la mesure des données : {error}",
     "ERROR_UPDATING_DATA": "Erreur lors de la mise à jour de l'affichage des données : {error}",
     "NOT_CONNECTED": "Non connecté",
     "CONNECT_FIRST": "Veuillez vous connecter au simulateur d'abord.",
