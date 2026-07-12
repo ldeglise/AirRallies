@@ -118,10 +118,198 @@ _EN_TRANSLATIONS: Dict[str, str] = {
     "UNKNOWN_SIMULATOR_TYPE": "Unknown simulator type: '{simulator_type}'. Use '{msfs}' or '{xplane}'",
 }
 
+# Italien
+_IT_TRANSLATIONS: Dict[str, str] = {
+    # GeoJSONWriter errors
+    "FILE_PATH_EMPTY": "Il percorso del file non può essere vuoto",
+    "LATITUDE_MISSING": "Latitudine mancante",
+    "LATITUDE_INVALID": "Latitudine non valida: {value}",
+    "LATITUDE_OUT_OF_RANGE": "Latitudine fuori intervallo: {result} (deve essere compresa tra -90 e 90)",
+    "LONGITUDE_MISSING": "Longitudine mancante",
+    "LONGITUDE_INVALID": "Longitudine non valida: {value}",
+    "LONGITUDE_OUT_OF_RANGE": "Longitudine fuori intervallo: {result} (deve essere compresa tra -180 e 180)",
+    
+    # BaseSimulatorMonitor messages
+    "TAKEOFF_DETECTED": "Decollo rilevato - Registrazione avviata",
+    "LANDING_DETECTED": "Atterraggio rilevato - Registrazione fermata",
+    "CONNECTED_WAITING_TAKEOFF": "Connesso al simulatore - In attesa di decollo",
+    "INITIAL_CONNECTION_FAILED": "Connessione iniziale al simulatore non riuscita",
+    "DATA_RETRIEVAL_ERROR": "Errore durante il recupero dei dati: {error}",
+    "DISCONNECTED": "Disconnesso",
+    "MONITORING_STOPPED": "Monitoraggio fermato",
+    
+    # MSFSMonitor errors
+    "SIMCONNECT_NOT_INSTALLED": "Modulo SimConnect non installato (solo Windows)",
+    "SIMCONNECT_CONNECTION_FAILED": "Connessione SimConnect fallita: {error}",
+    
+    # XPlaneMonitor errors
+    "REQUESTS_NOT_INSTALLED": "Modulo 'requests' non installato",
+    "XPLANE_CONNECTION_FAILED": "Connessione a X-Plane fallita: {error}",
+    "XPLANE_NOT_RUNNING": "X-Plane non è in esecuzione o l'API REST non è accessibile su {host}:{port}",
+    "XPLANE_API_TIMEOUT": "Timeout durante la connessione all'API X-Plane su {host}:{port}",
+    "XPLANE_API_ERROR": "Errore API X-Plane: {error}",
+    "XPLANE_NETWORK_ERROR": "Errore di rete durante la connessione a X-Plane: {error}",
+    "XPLANE_WRONG_ENDPOINT": "Impossibile connettersi all'API X-Plane su {host}:{port}. Verificare che il plugin X-Plane Connect sia installato o che l'API nativa sia abilitata nelle impostazioni di X-Plane.",
+    "XPLANE_CHECK_HTTP_SERVER": "Verificare che 'Enable HTTP Server' sia attivato in Impostazioni > Rete di X-Plane (porta predefinita: 8080).",
+    "XPLANE_INCOMING_TRAFFIC_DISABLED": "Il traffico in entrata è disabilitato nelle impostazioni di rete di X-Plane. Abilitare 'Allow Incoming Traffic' in Impostazioni > Rete.",
+    "XPLANE_INVALID_API_RESPONSE_FORMAT": "Formato di risposta API X-Plane non valido.",
+    "XPLANE_DATAREF_TIMEOUT": "Timeout durante la lettura della dataref {key} (ID: {id}).",
+    "XPLANE_HTTP_ERROR": "Errore HTTP {status} durante la connessione a X-Plane.",
+    
+    # _XPlaneAPI errors
+    "DATAREF_NOT_FOUND": "Dataref non trovata: {path}",
+    "XPLANE_INVALID_API_RESPONSE": "Risposta API X-Plane non valida: {error}",
+    
+    # create_monitor errors
+    "UNKNOWN_SIMULATOR_TYPE": "Tipo di simulatore sconosciuto: '{simulator_type}'. Usare '{msfs}' o '{xplane}'",
+}
+
+# Espagnol
+_ES_TRANSLATIONS: Dict[str, str] = {
+    # GeoJSONWriter errors
+    "FILE_PATH_EMPTY": "La ruta del archivo no puede estar vacía",
+    "LATITUDE_MISSING": "Latitud faltante",
+    "LATITUDE_INVALID": "Latitud no válida: {value}",
+    "LATITUDE_OUT_OF_RANGE": "Latitud fuera de rango: {result} (debe estar entre -90 y 90)",
+    "LONGITUDE_MISSING": "Longitud faltante",
+    "LONGITUDE_INVALID": "Longitud no válida: {value}",
+    "LONGITUDE_OUT_OF_RANGE": "Longitud fuera de rango: {result} (debe estar entre -180 y 180)",
+    
+    # BaseSimulatorMonitor messages
+    "TAKEOFF_DETECTED": "Despegue detectado - Grabación iniciada",
+    "LANDING_DETECTED": "Aterrizaje detectado - Grabación detenida",
+    "CONNECTED_WAITING_TAKEOFF": "Conectado al simulador - Esperando despegue",
+    "INITIAL_CONNECTION_FAILED": "Conexión inicial al simulador fallida",
+    "DATA_RETRIEVAL_ERROR": "Error al recuperar datos: {error}",
+    "DISCONNECTED": "Desconectado",
+    "MONITORING_STOPPED": "Monitoreo detenido",
+    
+    # MSFSMonitor errors
+    "SIMCONNECT_NOT_INSTALLED": "Módulo SimConnect no instalado (solo Windows)",
+    "SIMCONNECT_CONNECTION_FAILED": "Conexión SimConnect fallida: {error}",
+    
+    # XPlaneMonitor errors
+    "REQUESTS_NOT_INSTALLED": "Módulo 'requests' no instalado",
+    "XPLANE_CONNECTION_FAILED": "Conexión a X-Plane fallida: {error}",
+    "XPLANE_NOT_RUNNING": "X-Plane no se está ejecutando o la API REST no es accesible en {host}:{port}",
+    "XPLANE_API_TIMEOUT": "Tiempo de espera agotado al conectar a la API de X-Plane en {host}:{port}",
+    "XPLANE_API_ERROR": "Error de la API de X-Plane: {error}",
+    "XPLANE_NETWORK_ERROR": "Error de red al conectar a X-Plane: {error}",
+    "XPLANE_WRONG_ENDPOINT": "No se puede conectar a la API de X-Plane en {host}:{port}. Verifique que el plugin X-Plane Connect esté instalado o que la API nativa esté habilitada en Configuración > Red de X-Plane.",
+    "XPLANE_CHECK_HTTP_SERVER": "Verifique que 'Enable HTTP Server' esté activado en Configuración > Red de X-Plane (puerto predeterminado: 8080).",
+    "XPLANE_INCOMING_TRAFFIC_DISABLED": "El tráfico entrante está deshabilitado en la configuración de red de X-Plane. Active 'Allow Incoming Traffic' en Configuración > Red.",
+    "XPLANE_INVALID_API_RESPONSE_FORMAT": "Formato de respuesta de la API de X-Plane no válido.",
+    "XPLANE_DATAREF_TIMEOUT": "Tiempo de espera agotado al leer la dataref {key} (ID: {id}).",
+    "XPLANE_HTTP_ERROR": "Error HTTP {status} al conectar a X-Plane.",
+    
+    # _XPlaneAPI errors
+    "DATAREF_NOT_FOUND": "Dataref no encontrada: {path}",
+    "XPLANE_INVALID_API_RESPONSE": "Respuesta de la API de X-Plane no válida: {error}",
+    
+    # create_monitor errors
+    "UNKNOWN_SIMULATOR_TYPE": "Tipo de simulador desconocido: '{simulator_type}'. Use '{msfs}' o '{xplane}'",
+}
+
+# Portugais
+_PT_TRANSLATIONS: Dict[str, str] = {
+    # GeoJSONWriter errors
+    "FILE_PATH_EMPTY": "O caminho do arquivo não pode estar vazio",
+    "LATITUDE_MISSING": "Latitude ausente",
+    "LATITUDE_INVALID": "Latitude inválida: {value}",
+    "LATITUDE_OUT_OF_RANGE": "Latitude fora do intervalo: {result} (deve estar entre -90 e 90)",
+    "LONGITUDE_MISSING": "Longitude ausente",
+    "LONGITUDE_INVALID": "Longitude inválida: {value}",
+    "LONGITUDE_OUT_OF_RANGE": "Longitude fora do intervalo: {result} (deve estar entre -180 e 180)",
+    
+    # BaseSimulatorMonitor messages
+    "TAKEOFF_DETECTED": "Decolagem detectada - Gravação iniciada",
+    "LANDING_DETECTED": "Pouso detectado - Gravação parada",
+    "CONNECTED_WAITING_TAKEOFF": "Conectado ao simulador - Aguardando decolagem",
+    "INITIAL_CONNECTION_FAILED": "Falha na conexão inicial com o simulador",
+    "DATA_RETRIEVAL_ERROR": "Erro ao recuperar dados: {error}",
+    "DISCONNECTED": "Desconectado",
+    "MONITORING_STOPPED": "Monitoramento parado",
+    
+    # MSFSMonitor errors
+    "SIMCONNECT_NOT_INSTALLED": "Módulo SimConnect não instalado (somente Windows)",
+    "SIMCONNECT_CONNECTION_FAILED": "Falha na conexão SimConnect: {error}",
+    
+    # XPlaneMonitor errors
+    "REQUESTS_NOT_INSTALLED": "Módulo 'requests' não instalado",
+    "XPLANE_CONNECTION_FAILED": "Falha na conexão com X-Plane: {error}",
+    "XPLANE_NOT_RUNNING": "O X-Plane não está em execução ou a API REST não está acessível em {host}:{port}",
+    "XPLANE_API_TIMEOUT": "Tempo limite excedido ao conectar à API do X-Plane em {host}:{port}",
+    "XPLANE_API_ERROR": "Erro na API do X-Plane: {error}",
+    "XPLANE_NETWORK_ERROR": "Erro de rede ao conectar ao X-Plane: {error}",
+    "XPLANE_WRONG_ENDPOINT": "Impossível conectar à API do X-Plane em {host}:{port}. Verifique se o plugin X-Plane Connect está instalado ou se a API nativa está habilitada em Configurações > Rede do X-Plane.",
+    "XPLANE_CHECK_HTTP_SERVER": "Verifique se 'Enable HTTP Server' está ativado em Configurações > Rede do X-Plane (porta padrão: 8080).",
+    "XPLANE_INCOMING_TRAFFIC_DISABLED": "O tráfego de entrada está desabilitado nas configurações de rede do X-Plane. Ative 'Allow Incoming Traffic' em Configurações > Rede.",
+    "XPLANE_INVALID_API_RESPONSE_FORMAT": "Formato de resposta da API do X-Plane inválido.",
+    "XPLANE_DATAREF_TIMEOUT": "Tempo limite excedido ao ler a dataref {key} (ID: {id}).",
+    "XPLANE_HTTP_ERROR": "Erro HTTP {status} ao conectar ao X-Plane.",
+    
+    # _XPlaneAPI errors
+    "DATAREF_NOT_FOUND": "Dataref não encontrada: {path}",
+    "XPLANE_INVALID_API_RESPONSE": "Resposta da API do X-Plane inválida: {error}",
+    
+    # create_monitor errors
+    "UNKNOWN_SIMULATOR_TYPE": "Tipo de simulador desconhecido: '{simulator_type}'. Use '{msfs}' ou '{xplane}'",
+}
+
+# Allemand
+_DE_TRANSLATIONS: Dict[str, str] = {
+    # GeoJSONWriter errors
+    "FILE_PATH_EMPTY": "Der Dateipfad darf nicht leer sein",
+    "LATITUDE_MISSING": "Breitengrad fehlt",
+    "LATITUDE_INVALID": "Ungültiger Breitengrad: {value}",
+    "LATITUDE_OUT_OF_RANGE": "Breitengrad außer Bereich: {result} (muss zwischen -90 und 90 liegen)",
+    "LONGITUDE_MISSING": "Längengrad fehlt",
+    "LONGITUDE_INVALID": "Ungültiger Längengrad: {value}",
+    "LONGITUDE_OUT_OF_RANGE": "Längengrad außer Bereich: {result} (muss zwischen -180 und 180 liegen)",
+    
+    # BaseSimulatorMonitor messages
+    "TAKEOFF_DETECTED": "Start erkannt - Aufzeichnung gestartet",
+    "LANDING_DETECTED": "Landung erkannt - Aufzeichnung gestoppt",
+    "CONNECTED_WAITING_TAKEOFF": "Mit Simulator verbunden - Warte auf Start",
+    "INITIAL_CONNECTION_FAILED": "Erste Verbindung zum Simulator fehlgeschlagen",
+    "DATA_RETRIEVAL_ERROR": "Fehler beim Abrufen der Daten: {error}",
+    "DISCONNECTED": "Getrennt",
+    "MONITORING_STOPPED": "Überwachung gestoppt",
+    
+    # MSFSMonitor errors
+    "SIMCONNECT_NOT_INSTALLED": "SimConnect-Modul nicht installiert (nur Windows)",
+    "SIMCONNECT_CONNECTION_FAILED": "SimConnect-Verbindung fehlgeschlagen: {error}",
+    
+    # XPlaneMonitor errors
+    "REQUESTS_NOT_INSTALLED": "Modul 'requests' nicht installiert",
+    "XPLANE_CONNECTION_FAILED": "Verbindung zu X-Plane fehlgeschlagen: {error}",
+    "XPLANE_NOT_RUNNING": "X-Plane läuft nicht oder die REST-API ist unter {host}:{port} nicht zugänglich",
+    "XPLANE_API_TIMEOUT": "Zeitüberschreitung bei der Verbindung zur X-Plane-API unter {host}:{port}",
+    "XPLANE_API_ERROR": "X-Plane-API-Fehler: {error}",
+    "XPLANE_NETWORK_ERROR": "Netzwerkfehler bei der Verbindung zu X-Plane: {error}",
+    "XPLANE_WRONG_ENDPOINT": "Kann nicht zur X-Plane-API unter {host}:{port} verbinden. Überprüfen Sie, ob das X-Plane Connect-Plugin installiert ist oder die native HTTP-Server-API in den X-Plane-Einstellungen > Netzwerk aktiviert ist.",
+    "XPLANE_CHECK_HTTP_SERVER": "Überprüfen Sie, ob 'Enable HTTP Server' in X-Plane Einstellungen > Netzwerk aktiviert ist (Standardport: 8080).",
+    "XPLANE_INCOMING_TRAFFIC_DISABLED": "Eingehender Datenverkehr ist in den X-Plane-Netzwerkeinstellungen deaktiviert. Aktivieren Sie 'Allow Incoming Traffic' in Einstellungen > Netzwerk.",
+    "XPLANE_INVALID_API_RESPONSE_FORMAT": "Ungültiges X-Plane-API-Antwortformat.",
+    "XPLANE_DATAREF_TIMEOUT": "Zeitüberschreitung beim Lesen der Dataref {key} (ID: {id}).",
+    "XPLANE_HTTP_ERROR": "HTTP-Fehler {status} bei der Verbindung zu X-Plane.",
+    
+    # _XPlaneAPI errors
+    "DATAREF_NOT_FOUND": "Dataref nicht gefunden: {path}",
+    "XPLANE_INVALID_API_RESPONSE": "Ungültige X-Plane-API-Antwort: {error}",
+    
+    # create_monitor errors
+    "UNKNOWN_SIMULATOR_TYPE": "Unbekannter Simulator-Typ: '{simulator_type}'. Verwenden Sie '{msfs}' oder '{xplane}'",
+}
+
 # Dictionnaire des traductions disponibles
 _AVAILABLE_TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "fr": _FR_TRANSLATIONS,
     "en": _EN_TRANSLATIONS,
+    "it": _IT_TRANSLATIONS,
+    "es": _ES_TRANSLATIONS,
+    "pt": _PT_TRANSLATIONS,
+    "de": _DE_TRANSLATIONS,
 }
 
 

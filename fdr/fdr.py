@@ -80,11 +80,14 @@ class DataPoller(QObject):
     monitoring_state_changed = Signal(str)
     log_message = Signal(str)
     
-    def __init__(self, monitor):
+    def __init__(self, monitor, gui_trans_func=None):
         super().__init__()
         self.monitor = monitor
         self._running = False
         self._timer = None
+        # Use gui_trans from fdr module which is bound to ui.translations.gettext
+        # This ensures we use the same translation function as the main app
+        self._gui_trans = gui_trans
     
     def start(self, interval_ms=1000):
         """Start polling at the given interval (milliseconds)."""
@@ -114,29 +117,28 @@ class DataPoller(QObject):
             # Check connection status
             is_connected = self.monitor.is_connected
             # Use translated strings for status
-            from ui.translations import gettext as gui_trans_poller
-            status = gui_trans_poller("CONNECTION_CONNECTED") if is_connected else gui_trans_poller("CONNECTION_DISCONNECTED")
+            status = self._gui_trans("CONNECTION_CONNECTED") if is_connected else self._gui_trans("CONNECTION_DISCONNECTED")
             self.connection_changed.emit(is_connected, status)
             
             # Check flight state
             state = self.monitor.flight_state
             # Translate flight state
             state_mapping = {
-                FlightState.WAITING: gui_trans_poller("FLIGHT_STATE_WAITING"),
-                FlightState.IN_FLIGHT: gui_trans_poller("FLIGHT_STATE_IN_FLIGHT"),
-                FlightState.LANDED: gui_trans_poller("FLIGHT_STATE_LANDED"),
+                FlightState.WAITING: self._gui_trans("FLIGHT_STATE_WAITING"),
+                FlightState.IN_FLIGHT: self._gui_trans("FLIGHT_STATE_IN_FLIGHT"),
+                FlightState.LANDED: self._gui_trans("FLIGHT_STATE_LANDED"),
             }
             state_str = state_mapping.get(state, state.value.replace("_", " ").title())
             self.flight_state_changed.emit(state_str)
             
             # Check monitoring state
             if self.monitor._running:
-                self.monitoring_state_changed.emit(gui_trans_poller("MONITORING_RUNNING"))
+                self.monitoring_state_changed.emit(self._gui_trans("MONITORING_RUNNING"))
             else:
-                self.monitoring_state_changed.emit(gui_trans_poller("MONITORING_STOPPED"))
+                self.monitoring_state_changed.emit(self._gui_trans("MONITORING_STOPPED"))
                 
         except Exception as e:
-            self.log_message.emit(gui_trans_poller("ERROR_POLLING_DATA", error=str(e)))
+            self.log_message.emit(self._gui_trans("ERROR_POLLING_DATA", error=str(e)))
 
 
 # ---------------------------------------------------------------------------
@@ -168,11 +170,15 @@ class MainWindow(QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         
+        # Register callback for language changes now that UI exists
+        on_language_change(self._retranslate_ui)
+        
+        # Apply translations to UI BEFORE setup_ui_extras
+        # This ensures all _() calls in _setup_ui_extras use the correct language
+        self._retranslate_ui()
+
         # Setup additional UI properties
         self._setup_ui_extras()
-        
-        # Apply translations to UI
-        self._retranslate_ui()
         
         # Initialize monitor
         self.monitor = None
@@ -199,12 +205,18 @@ class MainWindow(QMainWindow):
         """Initialize language detection and setup language menu."""
         # Detect system language and set it (will fall back to English if not available)
         set_gui_language(None)  # None = auto-detect
+        detected_lang = get_gui_language()
+        
+        # If no language detected, default to French
+        if detected_lang is None:
+            set_gui_language("fr")
+            detected_lang = "fr"
         
         # Synchronize with sim_monitor translations
-        set_language_both(get_gui_language())
+        set_language_both(detected_lang)
         
-        # Register callback for language changes
-        on_language_change(self._retranslate_ui)
+        # Register callback for language changes AFTER UI is created
+        # (callback will be registered in __init__ after setupUi)
     
     def _setup_ui_extras(self):
         """Setup additional UI properties that can't be set in Qt Designer."""
@@ -219,9 +231,6 @@ class MainWindow(QMainWindow):
         # Configure text browser for logging
         self.ui.textBrowserLog.setOpenExternalLinks(True)
         
-        # Set initial status message using native status bar
-        self.statusBar().showMessage(_("READY"))
-        
         # Setup language menu
         self._setup_language_menu()
     
@@ -234,18 +243,44 @@ class MainWindow(QMainWindow):
         # Add language actions
         self.actionEnglish = self.menuLanguage.addAction(_("LANGUAGE_ENGLISH"))
         self.actionFrench = self.menuLanguage.addAction(_("LANGUAGE_FRENCH"))
+        self.actionItalian = self.menuLanguage.addAction(_("LANGUAGE_ITALIAN"))
+        self.actionSpanish = self.menuLanguage.addAction(_("LANGUAGE_SPANISH"))
+        self.actionPortuguese = self.menuLanguage.addAction(_("LANGUAGE_PORTUGUESE"))
+        self.actionGerman = self.menuLanguage.addAction(_("LANGUAGE_GERMAN"))
         
         # Connect language actions
         self.actionEnglish.triggered.connect(lambda: set_language_both("en"))
         self.actionFrench.triggered.connect(lambda: set_language_both("fr"))
+        self.actionItalian.triggered.connect(lambda: set_language_both("it"))
+        self.actionSpanish.triggered.connect(lambda: set_language_both("es"))
+        self.actionPortuguese.triggered.connect(lambda: set_language_both("pt"))
+        self.actionGerman.triggered.connect(lambda: set_language_both("de"))
         
         # Insert Language menu before Help menu (so Help stays last on the right)
         self.ui.menubar.insertMenu(self.ui.menuHelp.menuAction(), self.menuLanguage)
         
         # Mark current language
         current_lang = get_gui_language()
-        if current_lang == "fr":
+        self._update_language_checked_state(current_lang or "en")
+    
+    def _update_language_checked_state(self, lang: str):
+        """Update the checked state of language actions based on current language."""
+        # Uncheck all first
+        for action in [self.actionEnglish, self.actionFrench, self.actionItalian, 
+                      self.actionSpanish, self.actionPortuguese, self.actionGerman]:
+            action.setChecked(False)
+        
+        # Check the current language
+        if lang == "fr":
             self.actionFrench.setChecked(True)
+        elif lang == "it":
+            self.actionItalian.setChecked(True)
+        elif lang == "es":
+            self.actionSpanish.setChecked(True)
+        elif lang == "pt":
+            self.actionPortuguese.setChecked(True)
+        elif lang == "de":
+            self.actionGerman.setChecked(True)
         else:
             self.actionEnglish.setChecked(True)
     
@@ -265,14 +300,13 @@ class MainWindow(QMainWindow):
             self.menuLanguage.setTitle(_("LANGUAGE_MENU"))
             self.actionEnglish.setText(_("LANGUAGE_ENGLISH"))
             self.actionFrench.setText(_("LANGUAGE_FRENCH"))
+            self.actionItalian.setText(_("LANGUAGE_ITALIAN"))
+            self.actionSpanish.setText(_("LANGUAGE_SPANISH"))
+            self.actionPortuguese.setText(_("LANGUAGE_PORTUGUESE"))
+            self.actionGerman.setText(_("LANGUAGE_GERMAN"))
             # Update checked state - utiliser lang passé en paramètre (évite appel à get_gui_language())
             current_lang = lang or get_gui_language() or "en"
-            if current_lang == "fr":
-                self.actionFrench.setChecked(True)
-                self.actionEnglish.setChecked(False)
-            else:
-                self.actionEnglish.setChecked(True)
-                self.actionFrench.setChecked(False)
+            self._update_language_checked_state(current_lang)
         
         # Update tab widget
         self.ui.tabWidget.setTabText(0, _("MAIN_TAB"))  # Need to add MAIN_TAB to translations
@@ -749,6 +783,10 @@ class MainWindow(QMainWindow):
     
     def on_poller_connection_changed(self, connected, status):
         """Handle poller connection status updates."""
+        # Ensure status is translated (in case DataPoller returned an ID)
+        # This handles the case where DataPoller's translation didn't work
+        if status in ["CONNECTION_CONNECTED", "CONNECTION_DISCONNECTED"]:
+            status = _("CONNECTION_CONNECTED") if connected else _("CONNECTION_DISCONNECTED")
         self.ui.labelConnectionStatus.setText(status)
         palette = self.ui.labelConnectionStatus.palette()
         if connected:
@@ -760,6 +798,13 @@ class MainWindow(QMainWindow):
     
     def on_poller_flight_state_changed(self, state_str):
         """Handle flight state updates from poller."""
+        # Ensure state_str is translated (in case DataPoller returned an ID or partial translation)
+        if state_str in ["FLIGHT_STATE_WAITING", "FLIGHT_STATE_IN_FLIGHT", "FLIGHT_STATE_LANDED"]:
+            state_str = {
+                "FLIGHT_STATE_WAITING": _("FLIGHT_STATE_WAITING"),
+                "FLIGHT_STATE_IN_FLIGHT": _("FLIGHT_STATE_IN_FLIGHT"),
+                "FLIGHT_STATE_LANDED": _("FLIGHT_STATE_LANDED"),
+            }[state_str]
         self.ui.labelFlightStatus.setText(state_str)
         
         # Set color based on state (using translated strings)
@@ -774,6 +819,9 @@ class MainWindow(QMainWindow):
     
     def on_poller_monitoring_state_changed(self, state_str):
         """Handle monitoring state updates from poller."""
+        # Ensure state_str is translated (in case DataPoller returned an ID)
+        if state_str in ["MONITORING_RUNNING", "MONITORING_STOPPED"]:
+            state_str = _("MONITORING_RUNNING") if state_str == "MONITORING_RUNNING" else _("MONITORING_STOPPED")
         self.ui.labelMonitoringStatus.setText(state_str)
         palette = self.ui.labelMonitoringStatus.palette()
         if state_str == _("MONITORING_RUNNING"):
