@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LittleNavmap xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://www.littlenavmap.org/schema/lnmpln.xsd">
+  <Flightplan>
+    <Header>
+      <FlightplanType>VFR</FlightplanType>
+      <CruisingAlt>5000</CruisingAlt>
+      <CruisingAltF>5000.00000000</CruisingAltF>
+      <CreationDate>2026-07-14T20:05:49+02:00</CreationDate>
+      <FileVersion>1.2</FileVersion>
+      <ProgramName>Little Navmap</ProgramName>
+      <ProgramVersion>3.0.18</ProgramVersion>
+      <Documentation>https://www.littlenavmap.org/lnmpln.html</Documentation>
+    </Header>
+    <SimData Cycle="2605">XP12</SimData>
+    <NavData Cycle="2607">NAVIGRAPH</NavData>
+    <AircraftPerformance>
+      <FilePath>Cessna 172 SP.lnmperf</FilePath>
+      <Type>C172</Type>
+      <Name>Cessna 172 SP Skyhawk</Name>
+    </AircraftPerformance>
+    <Waypoints>
+      <Waypoint>
+        <Name>Sarlat Domme</Name>
+        <Ident>LFDS</Ident>
+        <Type>AIRPORT</Type>
+        <Pos Lon="1.243611" Lat="44.792221" Alt="978.00"/>
+      </Waypoint>
+      <Waypoint>
+        <Ident>WP1</Ident>
+        <Type>USER</Type>
+        <Pos Lon="1.258038" Lat="44.744904" Alt="2063.47"/>
+      </Waypoint>
+      <Waypoint>
+        <Ident>WP2</Ident>
+        <Type>USER</Type>
+        <Pos Lon="1.617594" Lat="44.800468" Alt="5000.00"/>
+      </Waypoint>
+      <Waypoint>
+        <Ident>WP3</Ident>
+        <Type>USER</Type>
+        <Pos Lon="1.854690" Lat="44.612438" Alt="5000.00"/>
+      </Waypoint>
+      <Waypoint>
+        <Ident>WP4</Ident>
+        <Type>USER</Type>
+        <Pos Lon="2.221917" Lat="44.946152" Alt="5000.00"/>
+      </Waypoint>
+      <Waypoint>
+        <Ident>WP5</Ident>
+        <Type>USER</Type>
+        <Pos Lon="2.576054" Lat="44.607365" Alt="5000.00"/>
+      </Waypoint>
+      <Waypoint>
+        <Ident>WP6</Ident>
+        <Type>USER</Type>
+        <Pos Lon="3.265661" Lat="44.523041" Alt="5000.00"/>
+      </Waypoint>
+      <Waypoint>
+        <Ident>WP7</Ident>
+        <Type>USER</Type>
+        <Pos Lon="3.468264" Lat="44.530659" Alt="4435.95"/>
+      </Waypoint>
+      <Waypoint>
+        <Name>Mende Brenoux</Name>
+        <Ident>LFNB</Ident>
+        <Type>AIRPORT</Type>
+        <Pos Lon="3.527633" Lat="44.504082" Alt="3360.00"/>
+      </Waypoint>
+    </Waypoints>
+  </Flightplan>
+</LittleNavmap>
